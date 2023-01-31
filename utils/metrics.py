@@ -80,7 +80,7 @@ class _Metric:
     def get_ref(self):
         return self._ref
 
-    def clean(self, preds):
+    def clean(self, preds, epoch):
         value = self(self._clean_audio, preds)
         if value > self.best_clean:
             self.best_clean = value

@@ -103,7 +103,7 @@ def get_paths(source):
 def update_state(clean, noisy, basedir, epoch, losses, metrics_tracker, out, args):
     for metric in metrics_tracker:
         # clean_target,noisy_target
-        metric.clean(out)
+        metric.clean(out, epoch)
         metric.noisy(out)
     if epoch % args.show_every == 0:
         if args.save_outputs:
