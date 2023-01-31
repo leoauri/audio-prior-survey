@@ -85,7 +85,7 @@ class _Metric:
         if value > self.best_clean:
             self.best_clean = value
             self.best_clean_wav = preds.detach().cpu().squeeze().numpy()
-            self.best_clean_epoch = len(self._clean_audio)
+            self.best_clean_epoch = epoch
         self.clean_vals.append(value)
 
     def noisy(self, preds):
