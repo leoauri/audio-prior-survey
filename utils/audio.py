@@ -124,6 +124,14 @@ def snr_mixer(clean, noise, snr_val, target_level_lower=-35, target_level_upper=
 ###################################################################################################################
 ###################################################################################################################
 
+def zero_samples(args, clean_audio):
+    noisy_audio = clean_audio.copy()
+    indexes = np.arange(len(noisy_audio))
+    np.random.shuffle(indexes)
+    indexes = indexes[:int(len(indexes) * args.zero_rate)]
+    noisy_audio[indexes] = 0
+    return noisy_audio
+
 def get_clean_n_noisy(paths, args, logger):
     clean_path, noisy_path = paths.strip().split(",")
     try:
@@ -151,14 +159,14 @@ def get_clean_n_noisy(paths, args, logger):
         loaded_snr = snr(torch.from_numpy(clean_audio), torch.from_numpy(noisy_audio))
         f = logger.info if (loaded_snr - args.snr).abs() < 1e-3 else logger.warning
         f(f"Loaded noisy audio with SNR {loaded_snr:.2f}. Specified SNR in args is {args.snr:.2f}")
-        # logger.info
-        # else:
-        #     logger.warning(f"Loaded noisy audio with snr {loaded_snr:.2f}, SNR specified in args is {args.snr:.2f}")
 
     else:
-        logger.info("No noisy path, sampling noise by args")
-        noise = sample_noise(args, clean_audio.shape)
-        clean_audio, _, noisy_audio, _ = snr_mixer(clean_audio, noise, args.snr)
+        logger.info("No noisy path, generating distorted signal by args")
+        if args.distortion_type == 'zero_samples':
+            noisy_audio = zero_samples(args, clean_audio)
+        else:
+            noise = sample_noise(args, clean_audio.shape)
+            clean_audio, _, noisy_audio, _ = snr_mixer(clean_audio, noise, args.snr)
 
     return torch.from_numpy(clean_audio).unsqueeze(0).unsqueeze(0).to(args.device), \
            torch.from_numpy(noisy_audio).unsqueeze(0).unsqueeze(0).to(args.device), clean_path

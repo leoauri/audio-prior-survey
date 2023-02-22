@@ -37,6 +37,11 @@ def get_args():
     parser.add_argument("--output_dir", type=Path, default="./evals", help="Path for experiments output")
     parser.add_argument("--device", type=str, default="cuda", choices=['cuda', 'cpu'])
 
+    parser.add_argument("--distortion_type", type=str, default="constant_noise", 
+            choices=['constant_noise', 'zero_samples'])
+
+    parser.add_argument("--zero_rate", type=float, default=0.01, help="Proportion of samples to zero")
+
     parser.add_argument("--noise_class", type=str, default="GAUSSIAN", choices=['GAUSSIAN', 'UNIFORM'])
     parser.add_argument("--noise_std", type=float, default=0.1)
     parser.add_argument("--crit", type=str, default="L1", choices=['L1', 'L2'])
