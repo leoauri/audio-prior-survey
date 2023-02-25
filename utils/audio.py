@@ -124,13 +124,23 @@ def snr_mixer(clean, noise, snr_val, target_level_lower=-35, target_level_upper=
 ###################################################################################################################
 ###################################################################################################################
 
-def zero_samples(args, clean_audio):
+def random_replace(clean_audio, replacement, proportion):
     noisy_audio = clean_audio.copy()
+    replacement = np.array(replacement)
     indexes = np.arange(len(noisy_audio))
     np.random.shuffle(indexes)
-    indexes = indexes[:int(len(indexes) * args.zero_rate)]
-    noisy_audio[indexes] = 0
+    indexes = indexes[:int(len(indexes) * proportion)]
+    if noisy_audio.shape == replacement.shape:
+        noisy_audio[indexes] = replacement[indexes]
+    else:
+        noisy_audio[indexes] = np.broadcast_to(replacement, noisy_audio.shape).copy()[indexes]
     return noisy_audio
+
+def zero_samples(args, clean_audio):
+    return random_replace(clean_audio, 0, args.zero_rate)
+
+def white_samples(args, clean_audio):
+    pass
 
 def get_clean_n_noisy(paths, args, logger):
     clean_path, noisy_path = paths.strip().split(",")
@@ -164,6 +174,8 @@ def get_clean_n_noisy(paths, args, logger):
         logger.info("No noisy path, generating distorted signal by args")
         if args.distortion_type == 'zero_samples':
             noisy_audio = zero_samples(args, clean_audio)
+        elif args.distortion_type == 'white_samples':
+            noisy_audio = white_samples(args, clean_audio)
         else:
             noise = sample_noise(args, clean_audio.shape)
             clean_audio, _, noisy_audio, _ = snr_mixer(clean_audio, noise, args.snr)
