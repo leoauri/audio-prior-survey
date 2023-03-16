@@ -36,6 +36,8 @@ def si_snr(target, preds):
     preds = preds.detach().cpu().numpy()
     normalized_s = ((target * preds).sum() / (np.linalg.norm(target) ** 2)) * target
     error = preds - normalized_s
+    if np.linalg.norm(error) == 0:
+        return np.inf
     return 10 * np.log10((np.linalg.norm(normalized_s) ** 2) / (np.linalg.norm(error) ** 2))
 
 

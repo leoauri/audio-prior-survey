@@ -40,23 +40,30 @@ def _plot_metric(metric, base_dir, show_estimates_vs_noise=True,save=True):
     ax, xmax = annot_max(iterations_i, estimates_vs_clean, color='red')
     ax.annotate("", xy=(0, reference[0]), xytext=(ax.get_xlim()[0], reference[0]),
                 arrowprops=dict(arrowstyle="->"))
-    plt.plot(reference, label=f"{metric}(Noisy, Clean)", color='orange')
+    # if reference is not infinity
+    if np.isfinite(metric.get_ref()):
+        plt.plot(reference, label=f"{metric}(Noisy, Clean)", color='orange')
     plt.legend()
     plt.xlabel("Iterations")
     plt.ylabel(f"{metric}")
     plt.title(f"{metric} Comparison")
     locs, _ = plt.yticks()
-    ##################
-    ### to prevent target ytick overlap with other yticks
-    ytickthresh = .25
-    yticks = sorted(list(locs) + [reference[0]])
-    ytickdiff = (locs[-1] - locs[0]) / (len(locs) - 1)
-    tindex = yticks.index(reference[0])
-    if tindex < len(yticks) - 1 and yticks[tindex + 1] - yticks[tindex] < ytickthresh * ytickdiff:
-        yticks.pop(tindex + 1)
-    elif tindex > 0 and yticks[tindex] - yticks[tindex - 1] < ytickthresh * ytickdiff:
-        yticks.pop(tindex - 1)
-    #################
+    # if reference is not infinity
+    if np.isfinite(metric.get_ref()):
+        ##################
+        ### to prevent target ytick overlap with other yticks
+        ytickthresh = .25
+        yticks = sorted(list(locs) + [reference[0]])
+        ytickdiff = (locs[-1] - locs[0]) / (len(locs) - 1)
+        tindex = yticks.index(reference[0])
+        if tindex < len(yticks) - 1 and yticks[tindex + 1] - yticks[tindex] < ytickthresh * ytickdiff:
+            yticks.pop(tindex + 1)
+        elif tindex > 0 and yticks[tindex] - yticks[tindex - 1] < ytickthresh * ytickdiff:
+            yticks.pop(tindex - 1)
+        #################
+    else:
+        yticks = sorted(list(locs))
+    # print(f'yticks: {yticks}, locs: {locs}, reference[0]: {[reference[0]]}')
     plt.yticks(np.array(yticks))
     if metric.ylim:
         plt.ylim(bottom=metric.ylim)
