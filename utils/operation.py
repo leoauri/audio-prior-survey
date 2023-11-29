@@ -214,9 +214,11 @@ def prepare_repetition_directory(experiment_dir, args):
 
 def prepare_experiment_directory(args):
     experiment_name = get_experiment_name(args)
-    experiment_dir = Path(args.output_dir) / experiment_name
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    experiment_dir = Path(args.output_dir)
     experiment_dir.mkdir(parents=True, exist_ok=True)
+    with open(experiment_dir / 'args.json', 'w') as convert_file:
+        json_args = {k: (str(v) if isinstance(v, Path) else v) for k, v in dict(args.__dict__).items()}
+        convert_file.write(json.dumps(json_args, indent=4))
     return experiment_dir
 
 ###################################################################################################################
