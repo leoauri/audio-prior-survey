@@ -48,6 +48,8 @@ def get_args():
     parser.add_argument("--snr", type=float, default=2.5, help="SNR")
     parser.add_argument("--samplerate", type=int, default='16000')
 
+    parser.add_argument("--architecture", type=str, default="Demucs", 
+            choices=['Demucs', 'NCP'])
 
     parser.add_argument("--skip", action="store_true", default=False, dest="skip", help="Add skip connections")
     parser.add_argument("--attention_layers", type=int, default=0, help="Number of attention layers")
@@ -59,6 +61,8 @@ def get_args():
     parser.add_argument("--resample", action="store_false", default=True, dest="resample",
                         help="Resample input BxCxT -> BxCx2T and vice verse for output")
 
+    parser.add_argument("--ncp_neurons", type=int, default=5, 
+            help="Number of neurons in NCP model")
 
     parser.add_argument("--clip_length", type=float, default=2,
                         help="Clip inputs to <clip_length> seconds. 0 for no clipping.")
