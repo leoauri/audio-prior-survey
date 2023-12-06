@@ -12,6 +12,7 @@ from utils.operation import get_args, prepare_repetition_directory, update_state
     prepare_experiment_directory, get_paths, get_crit
 from utils.metrics import MetricsTracker
 from model.models import get_ncp
+from model.models import get_sashimi
 
 MAX_EXPERIMENT_REPETITION = 1000
 
@@ -36,6 +37,8 @@ def main(args, logger):
         net_input = (torch.rand(size=clean.size(), device=clean.device) - 0.5) * 2
         if args.architecture == 'NCP':
             net = get_ncp(args)
+        elif args.architecture == 'SaShiMi':
+            net = get_sashimi(args)
         else:
             net = Demucs(sources=1, audio_channels=1, samplerate=args.samplerate, depth=args.depth,
                      skip=args.skip, lstm_layers=args.lstm_layers, glu=args.glu, attention_layers=args.attention_layers,
@@ -49,7 +52,9 @@ def main(args, logger):
                       data=clean.squeeze().detach().cpu().numpy())
         losses = []
         with torch.no_grad():
+            print(f'Input dimensions: {net_input.shape}')
             out = net(net_input).squeeze(0)
+            print(f'Output dimensions: {out.shape}')
             clean = center_trim(clean, out)
             noisy = center_trim(noisy, out)
 

@@ -49,7 +49,7 @@ def get_args():
     parser.add_argument("--samplerate", type=int, default='16000')
 
     parser.add_argument("--architecture", type=str, default="Demucs", 
-            choices=['Demucs', 'NCP'])
+            choices=['Demucs', 'NCP', 'SaShiMi'])
 
     parser.add_argument("--skip", action="store_true", default=False, dest="skip", help="Add skip connections")
     parser.add_argument("--attention_layers", type=int, default=0, help="Number of attention layers")
