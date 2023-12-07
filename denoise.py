@@ -57,6 +57,8 @@ def main(args, logger):
             print(f'Output dimensions: {out.shape}')
             clean = center_trim(clean, out)
             noisy = center_trim(noisy, out)
+        wavfile.write(str(repetition_directory / "init_pass.wav"), rate=args.samplerate,
+                      data=out.squeeze().detach().cpu().numpy())
 
         epochs_range = trange(1, args.epochs + 1)
         metrics_tracker = MetricsTracker(clean, noisy)
