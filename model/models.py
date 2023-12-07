@@ -31,5 +31,5 @@ def get_ncp(args):
     return ncp
 
 def get_sashimi(args):
-    sashimi = Packer(Sashimi(d_model=1, residual=False))
+    sashimi = Packer(Sashimi(d_model=1, residual=args.skip))
     return sashimi
