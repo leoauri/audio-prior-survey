@@ -79,6 +79,7 @@ def get_crit(args):
         return torch.nn.L1Loss()
     if args.crit == "L2":
         return torch.nn.MSELoss()
+    raise NotImplementedError(f'Loss {args.crit} not found')
 
 
 def get_paths(source):
