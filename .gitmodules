@@ -1,0 +1,3 @@
+[submodule "s4"]
+	path = s4
+	url = https://github.com/state-spaces/s4.git
