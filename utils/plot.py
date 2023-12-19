@@ -84,6 +84,16 @@ def _plot_loss(basedir, losses):
     plt.savefig(str(basedir / f"loss.png"))
     plt.close(fig)
 
+def plot_something(basedir, vals, name):
+    fig = plt.figure()
+    plt.plot(vals)
+    plt.title(f"{name} vs Iterations")
+    plt.xlabel("Iteration")
+    plt.ylabel(name)
+    plt.savefig(str(basedir / f"{name.lower().replace(' ', '_')}.png"))
+    plt.close(fig)
+
+
 
 def _plot_wavs(wavs, sr, prefix=""):
     fig, ax = plt.subplots(nrows=len(wavs), ncols=1, sharex=True)

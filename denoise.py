@@ -13,6 +13,8 @@ from utils.operation import get_args, prepare_repetition_directory, update_state
 from utils.metrics import MetricsTracker
 from model.models import get_ncp
 from model.models import get_sashimi
+from utils.plot import plot_something
+
 
 MAX_EXPERIMENT_REPETITION = 1000
 
@@ -35,6 +37,9 @@ def main(args, logger):
             logger.info("Finished required repetitions")
             break
         net_input = (torch.rand(size=clean.size(), device=clean.device) - 0.5) * 2
+        # write network input
+        wavfile.write(str(repetition_directory / "input_noise.wav"), rate=args.samplerate,
+                      data=net_input.squeeze().detach().cpu().numpy())
         if args.architecture == 'NCP':
             net = get_ncp(args)
         elif args.architecture == 'SaShiMi':
@@ -51,6 +56,8 @@ def main(args, logger):
         wavfile.write(str(repetition_directory / "clean.wav"), rate=args.samplerate,
                       data=clean.squeeze().detach().cpu().numpy())
         losses = []
+        aaouts = []
+        aains = []
         with torch.no_grad():
             print(f'Input dimensions: {net_input.shape}')
             out = net(net_input).squeeze(0)
@@ -73,6 +80,11 @@ def main(args, logger):
             epochs_range.set_description('Epoch %05d Loss=%f' % (epoch, loss))
             optimizer.step()
             update_state(clean, noisy, repetition_directory, epoch, losses, metrics_tracker, out, args)
+            aaouts.append(torch.mean(out.absolute()).item())
+            plot_something(repetition_directory, aaouts, "Output average absolute")
+            aains.append(torch.mean(net_input.absolute()).item())
+            plot_something(repetition_directory, aains, 
+                "Net input average absolute")
         save_repetition_results(metrics_tracker, np.array(losses), args.samplerate, repetition_directory)
         try:
             torch.save(net.state_dict(), str(repetition_directory / "state.th"))
