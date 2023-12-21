@@ -81,10 +81,11 @@ def main(args, logger):
             optimizer.step()
             update_state(clean, noisy, repetition_directory, epoch, losses, metrics_tracker, out, args)
             aaouts.append(torch.mean(out.absolute()).item())
-            plot_something(repetition_directory, aaouts, "Output average absolute")
             aains.append(torch.mean(net_input.absolute()).item())
-            plot_something(repetition_directory, aains, 
-                "Net input average absolute")
+            if epoch % args.show_every == 0:
+                plot_something(repetition_directory, aaouts, "Output average absolute")
+                plot_something(repetition_directory, aains, 
+                    "Net input average absolute")
         save_repetition_results(metrics_tracker, np.array(losses), args.samplerate, repetition_directory)
         try:
             torch.save(net.state_dict(), str(repetition_directory / "state.th"))
