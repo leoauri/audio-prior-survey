@@ -64,6 +64,9 @@ def get_args():
     parser.add_argument("--ncp_neurons", type=int, default=5, 
             help="Number of neurons in NCP model")
 
+    parser.add_argument("--sashimi_channels", type=int, default=8, 
+            help="SaShiMi architecture channels")
+
     parser.add_argument("--clip_length", type=float, default=2,
                         help="Clip inputs to <clip_length> seconds. 0 for no clipping.")
     parser.add_argument("--trim_start", type=float, default=0,

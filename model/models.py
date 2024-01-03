@@ -1,6 +1,7 @@
 from ncps.torch import CfC
 from ncps.wirings import AutoNCP
 from torch import nn
+import torch
 import torchaudio.functional as AF
 
 from s4.src.models.sequence.backbones.sashimi import Sashimi as SashmiBackbone
@@ -84,36 +85,23 @@ class Sashimi(nn.Module):
 
     def __init__(self, args):
         super().__init__()
-        self.encoder = nn.Embedding(256, 64)
+        self.encoder = nn.Linear(1, args.sashimi_channels)
+        self.sashimi_conf['d_model'] = args.sashimi_channels
         self.model = SashmiBackbone(**self.sashimi_conf)
         self.added_decoder = False
         self.device = args.device
+        self.channels = args.sashimi_channels
 
     def forward(self, x):
         if not self.added_decoder:
-            self.add_module('decoder', SequenceDecoder(64, 1, x.shape[1],
+            self.add_module('decoder', SequenceDecoder(self.channels, 1, x.shape[1],
                     mode='last').to(self.device))
             self.added_decoder = True
-        # print(f'Encoder input shape: {x.shape}')
+        x = x.unsqueeze(-1)
         x = self.encoder(x)
-        # print(f'Sashimi input shape: {x.shape}')
-        # Sashimi Backbone returns tuple of x, None
         x, _ = self.model(x)
-        # print(f'Decoder input shape: {x.shape}')
         x = self.decoder(x)
-        # print(f'Decoder output shape: {x.shape}')
-        return x
-
-
-class MuLaw(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    def forward(self, x):
-        x = AF.mu_law_encoding(x, 256)
-        x = self.model(x)
-        x = AF.mu_law_decoding(x, 256)
+        x = torch.tanh(x)
         return x
 
 
@@ -122,5 +110,5 @@ def get_ncp(args):
     return ncp
 
 def get_sashimi(args):
-    sashimi = Packer(MuLaw(Sashimi(args)), pre_shape=[1,-1], post_shape=[1,1,1,-1])
+    sashimi = Packer(Sashimi(args), pre_shape=[1,-1], post_shape=[1,1,1,-1])
     return sashimi
