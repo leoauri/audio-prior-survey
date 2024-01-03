@@ -4,12 +4,12 @@ import numpy as np
 import librosa
 import librosa.display
 
-plt.style.use('seaborn-whitegrid')
-plt.rc('font', family='serif', size=14)
-mpl.rcParams['figure.dpi'] = 300
+plt.style.use("seaborn-whitegrid")
+plt.rc("font", family="serif", size=14)
+mpl.rcParams["figure.dpi"] = 300
 
 
-def annot_max(x, y, ax=None, offset=0, color='orange'):
+def annot_max(x, y, ax=None, offset=0, color="orange"):
     xmax = x[np.argmax(y)]
     ymax = y.max()
     plt.scatter(xmax, ymax, 20, color=color)
@@ -19,30 +19,51 @@ def annot_max(x, y, ax=None, offset=0, color='orange'):
         ax = plt.gca()
     bbox_props = dict(boxstyle="square,pad=0.3", fc="w", ec="k", lw=0.72)
     arrowprops = dict(arrowstyle="->")
-    kw = dict(xycoords='data', textcoords="axes fraction",
-              arrowprops=arrowprops, bbox=bbox_props, ha="right", va="center", color=color)
+    kw = dict(
+        xycoords="data",
+        textcoords="axes fraction",
+        arrowprops=arrowprops,
+        bbox=bbox_props,
+        ha="right",
+        va="center",
+        color=color,
+    )
 
-    ax.annotate(text, xy=(xmax, ymax), xytext=(0.6, (offset + 1) * .1), **kw)
+    ax.annotate(text, xy=(xmax, ymax), xytext=(0.6, (offset + 1) * 0.1), **kw)
     # ax.annotate(text, xy=(xmax, ymax), xytext=(0.1+.3*offset, .1), **kw)
 
     return ax, xmax
 
 
-def _plot_metric(metric, base_dir, show_estimates_vs_noise=True,save=True):
+def _plot_metric(metric, base_dir, show_estimates_vs_noise=True, save=True):
     iterations_i = np.arange(len(metric))
     reference = np.full(len(metric), metric.get_ref())
     fig = plt.figure()
     estimates_vs_clean = metric.get_clean()
     estimates_vs_noise = metric.get_noisy()
-    plt.plot(iterations_i, estimates_vs_clean, label=f"{metric}(Estimates, Clean)", color='red')
+    plt.plot(
+        iterations_i,
+        estimates_vs_clean,
+        label=f"{metric}(Estimates, Clean)",
+        color="red",
+    )
     if show_estimates_vs_noise:
-        plt.plot(iterations_i, estimates_vs_noise, label=f"{metric}(Estimates, Noisy)", color='green')
-    ax, xmax = annot_max(iterations_i, estimates_vs_clean, color='red')
-    ax.annotate("", xy=(0, reference[0]), xytext=(ax.get_xlim()[0], reference[0]),
-                arrowprops=dict(arrowstyle="->"))
+        plt.plot(
+            iterations_i,
+            estimates_vs_noise,
+            label=f"{metric}(Estimates, Noisy)",
+            color="green",
+        )
+    ax, xmax = annot_max(iterations_i, estimates_vs_clean, color="red")
+    ax.annotate(
+        "",
+        xy=(0, reference[0]),
+        xytext=(ax.get_xlim()[0], reference[0]),
+        arrowprops=dict(arrowstyle="->"),
+    )
     # if reference is not infinity
     if np.isfinite(metric.get_ref()):
-        plt.plot(reference, label=f"{metric}(Noisy, Clean)", color='orange')
+        plt.plot(reference, label=f"{metric}(Noisy, Clean)", color="orange")
     plt.legend()
     plt.xlabel("Iterations")
     plt.ylabel(f"{metric}")
@@ -52,13 +73,18 @@ def _plot_metric(metric, base_dir, show_estimates_vs_noise=True,save=True):
     if np.isfinite(metric.get_ref()):
         ##################
         ### to prevent target ytick overlap with other yticks
-        ytickthresh = .25
+        ytickthresh = 0.25
         yticks = sorted(list(locs) + [reference[0]])
         ytickdiff = (locs[-1] - locs[0]) / (len(locs) - 1)
         tindex = yticks.index(reference[0])
-        if tindex < len(yticks) - 1 and yticks[tindex + 1] - yticks[tindex] < ytickthresh * ytickdiff:
+        if (
+            tindex < len(yticks) - 1
+            and yticks[tindex + 1] - yticks[tindex] < ytickthresh * ytickdiff
+        ):
             yticks.pop(tindex + 1)
-        elif tindex > 0 and yticks[tindex] - yticks[tindex - 1] < ytickthresh * ytickdiff:
+        elif (
+            tindex > 0 and yticks[tindex] - yticks[tindex - 1] < ytickthresh * ytickdiff
+        ):
             yticks.pop(tindex - 1)
         #################
     else:
@@ -84,6 +110,7 @@ def _plot_loss(basedir, losses):
     plt.savefig(str(basedir / f"loss.png"))
     plt.close(fig)
 
+
 def plot_something(basedir, vals, name):
     fig = plt.figure()
     plt.plot(vals)
@@ -94,7 +121,6 @@ def plot_something(basedir, vals, name):
     plt.close(fig)
 
 
-
 def _plot_wavs(wavs, sr, prefix=""):
     fig, ax = plt.subplots(nrows=len(wavs), ncols=1, sharex=True)
     titles = ["Noisy(Target)", "Output", "Clean Source"]
@@ -102,8 +128,8 @@ def _plot_wavs(wavs, sr, prefix=""):
         librosa.display.waveplot(wav.squeeze(), sr=sr, ax=ax[i])
         ax[i].set(title=titles[i])
         ax[i].label_outer()
-    plt.subplots_adjust(hspace=0.5, wspace=.1)
-    plt.savefig(prefix + '_waves.png')
+    plt.subplots_adjust(hspace=0.5, wspace=0.1)
+    plt.savefig(prefix + "_waves.png")
     plt.close(fig)
 
 
@@ -114,14 +140,15 @@ def _plot_wav_to_stft(wavs, sr, n_fft=512, hop_length=256, prefix=""):
     for i, wav in enumerate(wavs):
         amp = np.abs(librosa.stft(wav.squeeze(), n_fft=n_fft, hop_length=hop_length))
         D = librosa.amplitude_to_db(amp, ref=np.max)
-        img = librosa.display.specshow(D, y_axis='log', x_axis='time',
-                                       sr=sr, ax=ax[i])
+        img = librosa.display.specshow(D, y_axis="log", x_axis="time", sr=sr, ax=ax[i])
         ax[i].set(title=titles[i])
         ax[i].label_outer()
-    plt.subplots_adjust(hspace=0.2, wspace=.1)
+    plt.subplots_adjust(hspace=0.2, wspace=0.1)
     fig.colorbar(img, ax=ax, format="%+2.f dB")
-    plt.savefig(prefix + '_spectrograms.png')
+    plt.savefig(prefix + "_spectrograms.png")
     plt.close(fig)
+
+
 # def _plot_after(base_dir, metric, show_estimates_vs_noise=True, nameprefix="after_"):
 #     target = torchaudio.load(base_dir / "target.wav")[0]
 #     gt = torchaudio.load(base_dir / "gt.wav")[0]

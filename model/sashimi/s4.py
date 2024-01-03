@@ -19,7 +19,7 @@ contract = torch.einsum
 _conj = lambda x: torch.cat([x, x.conj()], dim=-1)
 _c2r = torch.view_as_real
 _r2c = torch.view_as_complex
-if tuple(map(int, torch.__version__.split('.')[:2])) >= (1, 10):
+if tuple(map(int, torch.__version__.split(".")[:2])) >= (1, 10):
     _resolve_conj = lambda x: x.conj().resolve_conj()
 else:
     _resolve_conj = lambda x: x.conj()
@@ -33,10 +33,20 @@ def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
 
     # this ensures all logging levels get marked with the rank zero decorator
     # otherwise logs would get multiplied for each GPU process in multi-GPU setup
-    for level in ("debug", "info", "warning", "error", "exception", "fatal", "critical"):
+    for level in (
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+        "fatal",
+        "critical",
+    ):
         setattr(logger, level, rank_zero_only(getattr(logger, level)))
 
     return logger
+
+
 log = get_logger(__name__)
 
 """Structured matrix kernels"""
@@ -45,8 +55,11 @@ log = get_logger(__name__)
 try:
     from extensions.kernels.cauchy import cauchy_mult as cauchy_cuda
     from extensions.kernels.vandermonde import log_vandermonde_cuda
+
     has_cuda_extension = True
-    log.info("CUDA extension for structured kernels (Cauchy and Vandermonde multiplication) found.")
+    log.info(
+        "CUDA extension for structured kernels (Cauchy and Vandermonde multiplication) found."
+    )
 except:
     log.warning(
         "CUDA extension for structured kernels (Cauchy and Vandermonde multiplication) not found. Install by going to extensions/kernels/ and running `python setup.py install`, for improved speed and memory efficiency. Note that the kernel changed for state-spaces 4.0 and must be recompiled."
@@ -57,26 +70,30 @@ except:
 try:
     import pykeops
     from pykeops.torch import Genred
+
     has_pykeops = True
     log.info("Pykeops installation found.")
 
     def _broadcast_dims(*tensors):
         max_dim = max([len(tensor.shape) for tensor in tensors])
-        tensors = [tensor.view((1,)*(max_dim-len(tensor.shape))+tensor.shape) for tensor in tensors]
+        tensors = [
+            tensor.view((1,) * (max_dim - len(tensor.shape)) + tensor.shape)
+            for tensor in tensors
+        ]
         return tensors
 
     def cauchy_keops(v, z, w):
-        expr_num = 'z * ComplexReal(v) - Real2Complex(Sum(v * w))'
-        expr_denom = 'ComplexMult(z-w, z-Conj(w))'
+        expr_num = "z * ComplexReal(v) - Real2Complex(Sum(v * w))"
+        expr_denom = "ComplexMult(z-w, z-Conj(w))"
 
         cauchy_mult = Genred(
-            f'ComplexDivide({expr_num}, {expr_denom})',
+            f"ComplexDivide({expr_num}, {expr_denom})",
             [
-                'v = Vj(2)',
-                'z = Vi(2)',
-                'w = Vj(2)',
+                "v = Vj(2)",
+                "z = Vi(2)",
+                "w = Vj(2)",
             ],
-            reduction_op='Sum',
+            reduction_op="Sum",
             axis=1,
         )
 
@@ -85,19 +102,19 @@ try:
         z = _c2r(z)
         w = _c2r(w)
 
-        r = 2*cauchy_mult(v, z, w, backend='GPU')
+        r = 2 * cauchy_mult(v, z, w, backend="GPU")
         return _r2c(r)
 
     def log_vandermonde_keops(v, x, L):
-        expr = 'ComplexMult(v, ComplexExp(ComplexMult(x, l)))'
+        expr = "ComplexMult(v, ComplexExp(ComplexMult(x, l)))"
         vandermonde_mult = Genred(
             expr,
             [
-                'v = Vj(2)',
-                'x = Vj(2)',
-                'l = Vi(2)',
+                "v = Vj(2)",
+                "x = Vj(2)",
+                "l = Vi(2)",
             ],
-            reduction_op='Sum',
+            reduction_op="Sum",
             axis=1,
         )
 
@@ -107,8 +124,8 @@ try:
         x = _c2r(x)
         l = _c2r(l)
 
-        r = vandermonde_mult(v, x, l, backend='GPU')
-        return 2*_r2c(r).real
+        r = vandermonde_mult(v, x, l, backend="GPU")
+        return 2 * _r2c(r).real
 
     def log_vandermonde_transpose_keops(u, v, x, L):
         """
@@ -120,16 +137,16 @@ try:
         V = Vandermonde(a, L) : (H N L)
         contract_L(V * u * v)
         """
-        expr = 'ComplexMult(ComplexMult(v, u), ComplexExp(ComplexMult(x, l)))'
+        expr = "ComplexMult(ComplexMult(v, u), ComplexExp(ComplexMult(x, l)))"
         vandermonde_mult = Genred(
             expr,
             [
-                'u = Vj(2)',
-                'v = Vi(2)',
-                'x = Vi(2)',
-                'l = Vj(2)',
+                "u = Vj(2)",
+                "v = Vi(2)",
+                "x = Vi(2)",
+                "l = Vj(2)",
             ],
-            reduction_op='Sum',
+            reduction_op="Sum",
             axis=1,
         )
 
@@ -140,7 +157,7 @@ try:
         x = _c2r(x)
         l = _c2r(l)
 
-        r = vandermonde_mult(u, v, x, l, backend='GPU')
+        r = vandermonde_mult(u, v, x, l, backend="GPU")
         return _r2c(r)
 
 except ImportError:
@@ -149,6 +166,7 @@ except ImportError:
         log.warning(
             "Falling back on slow Cauchy and Vandermonde kernel. Install at least one of pykeops or the CUDA extension for better speed and memory efficiency."
         )
+
 
 # Fallback versions
 def cauchy_naive(v, z, w):
@@ -160,8 +178,9 @@ def cauchy_naive(v, z, w):
     """
     v = _conj(v)
     w = _conj(w)
-    cauchy_matrix = v.unsqueeze(-1) / (z.unsqueeze(-2) - w.unsqueeze(-1)) # (... N L)
+    cauchy_matrix = v.unsqueeze(-1) / (z.unsqueeze(-2) - w.unsqueeze(-1))  # (... N L)
     return torch.sum(cauchy_matrix, dim=-2)
+
 
 def log_vandermonde_naive(v, x, L, conj=True):
     """
@@ -169,59 +188,71 @@ def log_vandermonde_naive(v, x, L, conj=True):
     x: (..., N)
     returns: (..., L) \sum v x^l
     """
-    vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x)) # (... N L)
-    vandermonde_prod = contract('... n, ... n l -> ... l', v, vandermonde_matrix) # (... L)
-    return 2*vandermonde_prod.real
+    vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x))  # (... N L)
+    vandermonde_prod = contract(
+        "... n, ... n l -> ... l", v, vandermonde_matrix
+    )  # (... L)
+    return 2 * vandermonde_prod.real
+
 
 def log_vandermonde_transpose_naive(u, v, x, L):
-    vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x)) # (... N L)
-    vandermonde_prod = contract('... l, ... n, ... n l -> ... n', u.to(x), v.to(x), vandermonde_matrix) # (... L)
+    vandermonde_matrix = torch.exp(x.unsqueeze(-1) * torch.arange(L).to(x))  # (... N L)
+    vandermonde_prod = contract(
+        "... l, ... n, ... n l -> ... n", u.to(x), v.to(x), vandermonde_matrix
+    )  # (... L)
     return vandermonde_prod
-
 
 
 """ Simple nn.Module components """
 
+
 def Activation(activation=None, dim=-1):
-    if activation in [ None, 'id', 'identity', 'linear' ]:
+    if activation in [None, "id", "identity", "linear"]:
         return nn.Identity()
-    elif activation == 'tanh':
+    elif activation == "tanh":
         return nn.Tanh()
-    elif activation == 'relu':
+    elif activation == "relu":
         return nn.ReLU()
-    elif activation == 'gelu':
+    elif activation == "gelu":
         return nn.GELU()
-    elif activation == 'elu':
+    elif activation == "elu":
         return nn.ELU()
-    elif activation in ['swish', 'silu']:
+    elif activation in ["swish", "silu"]:
         return nn.SiLU()
-    elif activation == 'glu':
+    elif activation == "glu":
         return nn.GLU(dim=dim)
-    elif activation == 'sigmoid':
+    elif activation == "sigmoid":
         return nn.Sigmoid()
-    elif activation == 'softplus':
+    elif activation == "softplus":
         return nn.Softplus()
     else:
-        raise NotImplementedError("hidden activation '{}' is not implemented".format(activation))
+        raise NotImplementedError(
+            "hidden activation '{}' is not implemented".format(activation)
+        )
+
 
 def LinearActivation(
-        d_input, d_output, bias=True,
-        transposed=False,
-        activation=None,
-        activate=False, # Apply activation as part of this module
-        **kwargs,
-    ):
+    d_input,
+    d_output,
+    bias=True,
+    transposed=False,
+    activation=None,
+    activate=False,  # Apply activation as part of this module
+    **kwargs,
+):
     """Returns a linear nn.Module with control over axes order, initialization, and activation."""
 
     # Construct core module
     linear_cls = partial(nn.Conv1d, kernel_size=1) if transposed else nn.Linear
-    if activation is not None and activation == 'glu': d_output *= 2
+    if activation is not None and activation == "glu":
+        d_output *= 2
     linear = linear_cls(d_input, d_output, bias=bias, **kwargs)
 
     if activate and activation is not None:
         activation = Activation(activation, dim=-2 if transposed else -1)
         linear = nn.Sequential(linear, activation)
     return linear
+
 
 class DropoutNd(nn.Module):
     def __init__(self, p: float = 0.5, tie=True, transposed=True):
@@ -230,24 +261,30 @@ class DropoutNd(nn.Module):
         """
         super().__init__()
         if p < 0 or p >= 1:
-            raise ValueError("dropout probability has to be in [0, 1), " "but got {}".format(p))
+            raise ValueError(
+                "dropout probability has to be in [0, 1), " "but got {}".format(p)
+            )
         self.p = p
         self.tie = tie
         self.transposed = transposed
-        self.binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
+        self.binomial = torch.distributions.binomial.Binomial(probs=1 - self.p)
 
     def forward(self, X):
         """X: (batch, dim, lengths...)."""
         if self.training:
-            if not self.transposed: X = rearrange(X, 'b ... d -> b d ...')
-            mask_shape = X.shape[:2] + (1,)*(X.ndim-2) if self.tie else X.shape
-            mask = torch.rand(*mask_shape, device=X.device) < 1.-self.p
-            X = X * mask * (1.0/(1-self.p))
-            if not self.transposed: X = rearrange(X, 'b d ... -> b ... d')
+            if not self.transposed:
+                X = rearrange(X, "b ... d -> b d ...")
+            mask_shape = X.shape[:2] + (1,) * (X.ndim - 2) if self.tie else X.shape
+            mask = torch.rand(*mask_shape, device=X.device) < 1.0 - self.p
+            X = X * mask * (1.0 / (1 - self.p))
+            if not self.transposed:
+                X = rearrange(X, "b d ... -> b ... d")
             return X
         return X
 
+
 """Misc functional utilities"""
+
 
 def power(L, A, v=None):
     """Compute A^L and the scan sum_i A^i v_i.
@@ -256,21 +293,24 @@ def power(L, A, v=None):
     v: (..., N, L)
     """
 
-    I = torch.eye(A.shape[-1]).to(A) # , dtype=A.dtype, device=A.device)
+    I = torch.eye(A.shape[-1]).to(A)  # , dtype=A.dtype, device=A.device)
 
     powers = [A]
     l = 1
     while True:
-        if L % 2 == 1: I = powers[-1] @ I
+        if L % 2 == 1:
+            I = powers[-1] @ I
         L //= 2
-        if L == 0: break
+        if L == 0:
+            break
         l *= 2
         if v is None:
             powers = [powers[-1] @ powers[-1]]
         else:
             powers.append(powers[-1] @ powers[-1])
 
-    if v is None: return I
+    if v is None:
+        return I
 
     # Invariants:
     # powers[-1] := A^l
@@ -290,12 +330,13 @@ def power(L, A, v=None):
 
     # Handle reduction for power of 2
     while v.size(-1) > 1:
-        v = rearrange(v, '... (z l) -> ... z l', z=2)
+        v = rearrange(v, "... (z l) -> ... z l", z=2)
         v = v[..., 0, :] + powers.pop() @ v[..., 1, :]
     return I, v.squeeze(-1)
 
 
 """HiPPO utilities"""
+
 
 def transition(measure, N, **measure_args):
     """A, B transition matrices for different measures.
@@ -307,11 +348,11 @@ def transition(measure, N, **measure_args):
       lagt, tlagt - previous versions of (tilted) Laguerre with slightly different normalization
     """
     # Legendre (translated)
-    if measure == 'legt':
+    if measure == "legt":
         Q = np.arange(N, dtype=np.float64)
-        R = (2*Q + 1) ** .5
+        R = (2 * Q + 1) ** 0.5
         j, i = np.meshgrid(Q, Q)
-        A = R[:, None] * np.where(i < j, (-1.)**(i-j), 1) * R[None, :]
+        A = R[:, None] * np.where(i < j, (-1.0) ** (i - j), 1) * R[None, :]
         B = R[:, None]
         A = -A
 
@@ -319,7 +360,7 @@ def transition(measure, N, **measure_args):
         A *= 0.5
         B *= 0.5
     # Legendre (scaled)
-    elif measure == 'legs':
+    elif measure == "legs":
         q = np.arange(N, dtype=np.float64)
         col, row = np.meshgrid(q, q)
         r = 2 * q + 1
@@ -327,13 +368,15 @@ def transition(measure, N, **measure_args):
         T = np.sqrt(np.diag(2 * q + 1))
         A = T @ M @ np.linalg.inv(T)
         B = np.diag(T)[:, None]
-        B = B.copy() # Otherwise "UserWarning: given NumPY array is not writeable..." after torch.as_tensor(B)
-    elif measure in ['fourier', 'fout']:
-        freqs = np.arange(N//2)
-        d = np.stack([np.zeros(N//2), freqs], axis=-1).reshape(-1)[1:]
-        A = np.pi*(-np.diag(d, 1) + np.diag(d, -1))
+        B = (
+            B.copy()
+        )  # Otherwise "UserWarning: given NumPY array is not writeable..." after torch.as_tensor(B)
+    elif measure in ["fourier", "fout"]:
+        freqs = np.arange(N // 2)
+        d = np.stack([np.zeros(N // 2), freqs], axis=-1).reshape(-1)[1:]
+        A = np.pi * (-np.diag(d, 1) + np.diag(d, -1))
         B = np.zeros(N)
-        B[0::2] = 2**.5
+        B[0::2] = 2**0.5
         B[0] = 1
 
         # Subtract off rank correction - this corresponds to the other endpoint u(t-1) in this case
@@ -344,32 +387,37 @@ def transition(measure, N, **measure_args):
 
     return A, B
 
+
 def rank_correction(measure, N, rank=1, dtype=torch.float):
     """Return low-rank matrix L such that A + L is normal."""
 
-    if measure == 'legs':
+    if measure == "legs":
         assert rank >= 1
-        P = torch.sqrt(.5+torch.arange(N, dtype=dtype)).unsqueeze(0) # (1 N)
-    elif measure == 'legt':
+        P = torch.sqrt(0.5 + torch.arange(N, dtype=dtype)).unsqueeze(0)  # (1 N)
+    elif measure == "legt":
         assert rank >= 2
-        P = torch.sqrt(1+2*torch.arange(N, dtype=dtype)) # (N)
+        P = torch.sqrt(1 + 2 * torch.arange(N, dtype=dtype))  # (N)
         P0 = P.clone()
-        P0[0::2] = 0.
+        P0[0::2] = 0.0
         P1 = P.clone()
-        P1[1::2] = 0.
-        P = torch.stack([P0, P1], dim=0) # (2 N)
-        P *= 2**(-0.5) # Halve the rank correct just like the original matrix was halved
-    elif measure in ['fourier', 'fout']:
+        P1[1::2] = 0.0
+        P = torch.stack([P0, P1], dim=0)  # (2 N)
+        P *= 2 ** (
+            -0.5
+        )  # Halve the rank correct just like the original matrix was halved
+    elif measure in ["fourier", "fout"]:
         P = torch.zeros(N)
-        P[0::2] = 2**.5
+        P[0::2] = 2**0.5
         P[0] = 1
         P = P.unsqueeze(0)
-    else: raise NotImplementedError
+    else:
+        raise NotImplementedError
 
     d = P.size(0)
     if rank > d:
-        P = torch.cat([P, torch.zeros(rank-d, N, dtype=dtype)], dim=0) # (rank N)
+        P = torch.cat([P, torch.zeros(rank - d, N, dtype=dtype)], dim=0)  # (rank N)
     return P
+
 
 def nplr(measure, N, rank=1, dtype=torch.float, diagonalize_precision=True, B_clip=2.0):
     """Constructs NPLR form of HiPPO matrices.
@@ -389,31 +437,33 @@ def nplr(measure, N, rank=1, dtype=torch.float, diagonalize_precision=True, B_cl
     cdtype = torch.cfloat if dtype == torch.float else torch.cdouble
 
     A, B = transition(measure, N)
-    A = torch.as_tensor(A, dtype=dtype) # (N, N)
-    B = torch.as_tensor(B, dtype=dtype)[:, 0] # (N,)
+    A = torch.as_tensor(A, dtype=dtype)  # (N, N)
+    B = torch.as_tensor(B, dtype=dtype)[:, 0]  # (N,)
 
-    P = rank_correction(measure, N, rank=rank, dtype=dtype) # (r N)
-    AP = A + torch.sum(P.unsqueeze(-2)*P.unsqueeze(-1), dim=-3)
+    P = rank_correction(measure, N, rank=rank, dtype=dtype)  # (r N)
+    AP = A + torch.sum(P.unsqueeze(-2) * P.unsqueeze(-1), dim=-3)
 
     # We require AP to be nearly skew-symmetric
     _A = AP + AP.transpose(-1, -2)
-    if (err := torch.sum((_A - _A[0,0]*torch.eye(N))**2) / N) > 1e-5: # if not torch.allclose(_A - _A[0,0]*torch.eye(N), torch.zeros(N, N), atol=1e-5):
+    if (
+        err := torch.sum((_A - _A[0, 0] * torch.eye(N)) ** 2) / N
+    ) > 1e-5:  # if not torch.allclose(_A - _A[0,0]*torch.eye(N), torch.zeros(N, N), atol=1e-5):
         print("WARNING: HiPPO matrix not skew symmetric", err)
-
 
     # Take advantage of identity + skew-symmetric form to calculate real and imaginary parts separately
     # Imaginary part can use eigh instead of eig
     W_re = torch.mean(torch.diagonal(AP), -1, keepdim=True)
 
     # Diagonalize in double precision
-    if diagonalize_precision: AP = AP.to(torch.double)
+    if diagonalize_precision:
+        AP = AP.to(torch.double)
     # w, V = torch.linalg.eig(AP) # (..., N) (..., N, N)
-    W_im, V = torch.linalg.eigh(AP*-1j) # (..., N) (..., N, N)
-    if diagonalize_precision: W_im, V = W_im.to(cdtype), V.to(cdtype)
+    W_im, V = torch.linalg.eigh(AP * -1j)  # (..., N) (..., N, N)
+    if diagonalize_precision:
+        W_im, V = W_im.to(cdtype), V.to(cdtype)
     W = W_re + 1j * W_im
     # Check: V W V^{-1} = A
     # print("check", V @ torch.diag_embed(W) @ V.conj().transpose(-1, -2))
-
 
     # Only keep half of each conjugate pair
     _, idx = torch.sort(W.imag)
@@ -422,44 +472,49 @@ def nplr(measure, N, rank=1, dtype=torch.float, diagonalize_precision=True, B_cl
 
     # There is an edge case when eigenvalues can be 0, which requires some machinery to handle
     # We use a huge hack here: Assume only one pair is 0, and that it is the first row/column of A (only happens in Fourier case)
-    V = V_sorted[:, :N//2]
-    W = W_sorted[:N//2]  # Only keep negative imaginary components
+    V = V_sorted[:, : N // 2]
+    W = W_sorted[: N // 2]  # Only keep negative imaginary components
     assert W[-2].abs() > 1e-4, "Only 1 zero eigenvalue allowed in diagonal part of A"
     if W[-1].abs() < 1e-4:
-        V[:, -1] = 0.
+        V[:, -1] = 0.0
         V[0, -1] = 2**-0.5
         V[1, -1] = 2**-0.5 * 1j
 
     _AP = V @ torch.diag_embed(W) @ V.conj().transpose(-1, -2)
-    if ((err := torch.sum((2*_AP.real-AP)**2)/N) > 1e-5):
-        print("Warning: Diagonalization of A matrix not numerically precise - error", err)
+    if (err := torch.sum((2 * _AP.real - AP) ** 2) / N) > 1e-5:
+        print(
+            "Warning: Diagonalization of A matrix not numerically precise - error", err
+        )
     # print("check", V @ torch.diag_embed(W) @ V.conj().transpose(-1, -2))
 
     V_inv = V.conj().transpose(-1, -2)
 
     # C = initial_C(measure, N, dtype=dtype)
-    B = contract('ij, j -> i', V_inv, B.to(V)) # V^* B
+    B = contract("ij, j -> i", V_inv, B.to(V))  # V^* B
     # C = contract('ij, j -> i', V_inv, C.to(V)) # V^* C
-    P = contract('ij, ...j -> ...i', V_inv, P.to(V)) # V^* P
+    P = contract("ij, ...j -> ...i", V_inv, P.to(V))  # V^* P
 
     if B_clip is not None:
-        B = B.real + 1j*torch.clamp(B.imag, min=-B_clip, max=B_clip)
+        B = B.real + 1j * torch.clamp(B.imag, min=-B_clip, max=B_clip)
 
     # W represents the imaginary part of the DPLR form: A = W - PP^*
     # Downstream classes just call this A for simplicity,
     # which is also more consistent with the diagonal case
     return W, P, B, V
 
+
 def dplr(
-    init='hippo',
-    N=64, rank=1, H=1,
+    init="hippo",
+    N=64,
+    rank=1,
+    H=1,
     dtype=torch.float,
     real_random=False,
     real_scale=1.0,
     imag_random=False,
     imag_scale=1.0,
     B_random=False,
-    B_init='constant',
+    B_init="constant",
     B_scale=1.0,
     P_scale=1.0,
     normalize=False,
@@ -486,94 +541,105 @@ def dplr(
 
     # Construct real part of diagonal A (must be non-negative)
     if real_random:
-        real_part = torch.rand(H, N//2)
+        real_part = torch.rand(H, N // 2)
     else:
-        real_part = .5 * torch.ones(H, N//2)
+        real_part = 0.5 * torch.ones(H, N // 2)
     real_part = real_scale * real_part
 
     # Construct imaginary part of diagonal A (must be non-negative)
     if imag_random:
-        imag_part = N//2 * torch.rand(H, N//2)
+        imag_part = N // 2 * torch.rand(H, N // 2)
     else:
-        imag_part = repeat(torch.arange(N//2), 'n -> h n', h=H)
+        imag_part = repeat(torch.arange(N // 2), "n -> h n", h=H)
 
-    if init in ['random', 'rand']:
-        imag_part = torch.exp(torch.randn(H, N//2))
-    elif init == 'real':
+    if init in ["random", "rand"]:
+        imag_part = torch.exp(torch.randn(H, N // 2))
+    elif init == "real":
         imag_part = 0 * imag_part
         if real_random:
-            real_part = torch.rand(H, N//2) * N//2
+            real_part = torch.rand(H, N // 2) * N // 2
         else:
             # This is the S4D-Real method described in the S4D paper
             # The A matrix is diag(-1, -2, ..., -N), which are the eigenvalues of the HiPPO matrix
-            real_part = 1 + repeat(torch.arange(N//2), 'n -> h n', h=H)
-    elif init in ['linear', 'lin']:
+            real_part = 1 + repeat(torch.arange(N // 2), "n -> h n", h=H)
+    elif init in ["linear", "lin"]:
         imag_part = pi * imag_part
-    elif init in ['inverse', 'inv']: # Based on asymptotics of the default HiPPO matrix
-        imag_part = 1/pi * N * (N/(1+2*imag_part)-1)
-    elif init in ['inverse2', 'inv2']:
-        imag_part = 1/pi * N * (N/(1+imag_part)-1)
-    elif init in ['quadratic', 'quad']:
-        imag_part = 1/pi * (1+2*imag_part)**2
-    elif init in ['legs', 'hippo']:
-        A, _, _, _ = nplr('legs', N)
+    elif init in ["inverse", "inv"]:  # Based on asymptotics of the default HiPPO matrix
+        imag_part = 1 / pi * N * (N / (1 + 2 * imag_part) - 1)
+    elif init in ["inverse2", "inv2"]:
+        imag_part = 1 / pi * N * (N / (1 + imag_part) - 1)
+    elif init in ["quadratic", "quad"]:
+        imag_part = 1 / pi * (1 + 2 * imag_part) ** 2
+    elif init in ["legs", "hippo"]:
+        A, _, _, _ = nplr("legs", N)
         imag_part = -A.imag  # Positive
-    else: raise NotImplementedError
+    else:
+        raise NotImplementedError
     imag_part = imag_scale * imag_part
 
     # Construct diagonal A
     A = -real_part - 1j * imag_part  # Force negative real and imag
-    assert torch.all(A.real < 1e-4) and torch.all(A.imag <= 0.0)  # Allow some tolerance for numerical precision on real part
+    assert torch.all(A.real < 1e-4) and torch.all(
+        A.imag <= 0.0
+    )  # Allow some tolerance for numerical precision on real part
 
     # Initialize B
     if B_random:
-        log.warning("'B_random' is deprecated in favor of B_init='random' and will be deprecated in a future version.")
-    if init in ['legs', 'hippo']:
-        log.info(f'Initializing with S4D-LegS and ignoring argument {B_init=}')
+        log.warning(
+            "'B_random' is deprecated in favor of B_init='random' and will be deprecated in a future version."
+        )
+    if init in ["legs", "hippo"]:
+        log.info(f"Initializing with S4D-LegS and ignoring argument {B_init=}")
         # Special initialization using the HiPPO B matrix
         # Note that theory (from S4D paper) says that B should be halved
         # to match DPLR but we drop this 0.5 factor for simplicity
-        _, P, B, _ = nplr('legs', N, B_clip=2.0)
-        B = repeat(B, 'n -> h n', h=H).clone().contiguous()
-    elif B_init == 'constant':
-        B = torch.ones(H, N//2, dtype=dtype)
-    elif B_init == 'random':
-        B = torch.randn(H, N//2, dtype=dtype)
-    elif B_init == 'alternating':  # Seems to track 'constant' exactly for some reason
-        B = torch.ones(H, N//4, 2, dtype=dtype)
+        _, P, B, _ = nplr("legs", N, B_clip=2.0)
+        B = repeat(B, "n -> h n", h=H).clone().contiguous()
+    elif B_init == "constant":
+        B = torch.ones(H, N // 2, dtype=dtype)
+    elif B_init == "random":
+        B = torch.randn(H, N // 2, dtype=dtype)
+    elif B_init == "alternating":  # Seems to track 'constant' exactly for some reason
+        B = torch.ones(H, N // 4, 2, dtype=dtype)
         B[:, :, 1] *= -1
-        B = B.view(H, N//2)
-    elif B_init == 'unit-cw':
+        B = B.view(H, N // 2)
+    elif B_init == "unit-cw":
         z = torch.tensor(torch.exp(-2j * pi / N), dtype=dtype)
         B = z ** torch.arange(0, N // 2)
-        B = repeat(B, 'n -> h n', h=H).clone().contiguous()
-    elif B_init == 'unit-ccw':
+        B = repeat(B, "n -> h n", h=H).clone().contiguous()
+    elif B_init == "unit-ccw":
         z = torch.tensor(torch.exp(2j * pi / N), dtype=dtype)
         B = z ** torch.arange(0, N // 2)
-        B = repeat(B, 'n -> h n', h=H).clone().contiguous()
-    else: raise NotImplementedError
+        B = repeat(B, "n -> h n", h=H).clone().contiguous()
+    else:
+        raise NotImplementedError
     B *= B_scale
 
     # Experimental feature that appeared in earlier versions of HTTYH (not extensively tested)
     # Seems more principled for normalization theoretically, but seemed to hurt on PathX
     if normalize:
-        norm = -B/A # (H, N) # Result if you integrate the kernel with constant 1 function
-        zeta = 2*torch.sum(torch.abs(norm)**2, dim=-1, keepdim=True) # Variance with a random C vector
-        B = B / zeta**.5
+        norm = (
+            -B / A
+        )  # (H, N) # Result if you integrate the kernel with constant 1 function
+        zeta = 2 * torch.sum(
+            torch.abs(norm) ** 2, dim=-1, keepdim=True
+        )  # Variance with a random C vector
+        B = B / zeta**0.5
 
     # Initialize P
-    if B_init in ['legs', 'hippo']:
+    if B_init in ["legs", "hippo"]:
         # P constructed earlier
-        P = repeat(P, 'r n -> r h n', h=H).clone().contiguous()
+        P = repeat(P, "r n -> r h n", h=H).clone().contiguous()
     else:
-        P = torch.randn(rank, H, N//2, dtype=dtype)
+        P = torch.randn(rank, H, N // 2, dtype=dtype)
         P = P * P_scale
 
     # Initialize V (only used in testing)
-    V = torch.eye(N, dtype=dtype)[:, :N//2]
-    V = repeat(V, 'n m -> h n m', h=H)
+    V = torch.eye(N, dtype=dtype)[:, : N // 2]
+    V = repeat(V, "n m -> h n m", h=H)
 
     return A, P, B, V
+
 
 def ssm(init, N, R, H, **ssm_args):
     """Dispatcher to create single SSM initialization
@@ -593,65 +659,72 @@ def ssm(init, N, R, H, **ssm_args):
         A, P, B, V = dplr(N=N, rank=R, H=H, **ssm_args)
     else:
         A, P, B, V = nplr(init, N, R, **ssm_args)
-        A = repeat(A, 'n -> s n', s=H)
-        P = repeat(P, 'r n -> r s n', s=H)
-        B = repeat(B, 'n -> s n', s=H)
-        V = repeat(V, 'n m -> s n m', s=H)
+        A = repeat(A, "n -> s n", s=H)
+        P = repeat(P, "r n -> r s n", s=H)
+        B = repeat(B, "n -> s n", s=H)
+        V = repeat(V, "n m -> s n m", s=H)
     return A, P, B, V
 
+
 combinations = {
-    'hippo': ['legs', 'fourier'],
-    'diag': ['diag-inv', 'diag-lin'],
-    'all': ['legs', 'fourier', 'diag-inv', 'diag-lin'],
+    "hippo": ["legs", "fourier"],
+    "diag": ["diag-inv", "diag-lin"],
+    "all": ["legs", "fourier", "diag-inv", "diag-lin"],
 }
+
 
 def combination(inits, N, R, S, **ssm_args):
     if isinstance(inits, str):
         inits = combinations[inits] if inits in combinations else [inits]
 
-    assert S % len(inits) == 0, f"{S} independent trainable SSM copies must be multiple of {len(inits)} different inits"
-    A, P, B, V = zip(
-        *[ssm(init, N, R, S // len(inits), **ssm_args) for init in inits]
-    )
-    A = torch.cat(A, dim=0) # (S N)
-    P = torch.cat(P, dim=1) # (R S N)
-    B = torch.cat(B, dim=0) # (S N)
-    V = torch.cat(V, dim=0) # (S N N)
+    assert (
+        S % len(inits) == 0
+    ), f"{S} independent trainable SSM copies must be multiple of {len(inits)} different inits"
+    A, P, B, V = zip(*[ssm(init, N, R, S // len(inits), **ssm_args) for init in inits])
+    A = torch.cat(A, dim=0)  # (S N)
+    P = torch.cat(P, dim=1)  # (R S N)
+    B = torch.cat(B, dim=0)  # (S N)
+    V = torch.cat(V, dim=0)  # (S N N)
     return A, P, B, V
 
 
 """SSM convolution kernels"""
 
-def inv_transform(param, transform='none'):
+
+def inv_transform(param, transform="none"):
     """Initialize a (positive) parameter under a transform."""
     param = torch.clamp(param, min=1e-4)
-    if transform == 'none':
+    if transform == "none":
         return param
-    elif transform == 'exp':
-        return torch.log(param) # Some of the HiPPO methods have real part 0
-    elif transform == 'relu':
+    elif transform == "exp":
+        return torch.log(param)  # Some of the HiPPO methods have real part 0
+    elif transform == "relu":
         return param
-    elif transform == 'sigmoid':
+    elif transform == "sigmoid":
         return torch.logit(param)
-    elif transform == 'softplus':
-        return torch.log(torch.exp(param)-1)
-    else: raise NotImplementedError
+    elif transform == "softplus":
+        return torch.log(torch.exp(param) - 1)
+    else:
+        raise NotImplementedError
 
-def param_transform(param, transform='none'):
+
+def param_transform(param, transform="none"):
     """Get a (positive) parameter under a transform."""
-    if transform == 'none':
+    if transform == "none":
         p = param
-    elif transform == 'exp':
+    elif transform == "exp":
         p = torch.exp(param)
-    elif transform == 'relu':
+    elif transform == "relu":
         # JAX version seems to NaN if you allow 0's, although this code was fine without it
-        p = F.relu(param)+1e-4
-    elif transform == 'sigmoid':
+        p = F.relu(param) + 1e-4
+    elif transform == "sigmoid":
         p = F.sigmoid(param)
-    elif transform == 'softplus':
+    elif transform == "softplus":
         p = F.softplus(param)
-    else: raise NotImplementedError
+    else:
+        raise NotImplementedError
     return p
+
 
 class Kernel(nn.Module):
     """Interface for modules that produce convolution kernels.
@@ -760,8 +833,10 @@ class Kernel(nn.Module):
             self.register_parameter(name, nn.Parameter(tensor))
 
             optim = {}
-            if lr is not None: optim["lr"] = lr
-            if wd is not None: optim["weight_decay"] = wd
+            if lr is not None:
+                optim["lr"] = lr
+            if wd is not None:
+                optim["weight_decay"] = wd
             setattr(getattr(self, name), "_optim", optim)
 
     def _setup_step(self, **kwargs):
@@ -794,6 +869,7 @@ class Kernel(nn.Module):
         """Same as d_state, only needed for niche codepaths involving recurrent state."""
         raise NotImplementedError
 
+
 class SSMKernel(Kernel):
     """Parent class for different SSM parameterizations.
 
@@ -823,15 +899,21 @@ class SSMKernel(Kernel):
         # Generate dt
         if self.deterministic:  # Meant for debugging
             assert self.dt_tie, "Deterministic dt initialization is tied"
-            assert self.dt_transform == 'exp', "Deterministic dt transform should be 'exp' for simplicity"
-            inv_dt = torch.exp(torch.linspace(math.log(self.dt_min), math.log(self.dt_max), self.H)).unsqueeze(-1) # (H 1)
+            assert (
+                self.dt_transform == "exp"
+            ), "Deterministic dt transform should be 'exp' for simplicity"
+            inv_dt = torch.exp(
+                torch.linspace(math.log(self.dt_min), math.log(self.dt_max), self.H)
+            ).unsqueeze(
+                -1
+            )  # (H 1)
         else:
-            shape = (self.H, 1) if self.dt_tie else (self.H, self.N//2)
+            shape = (self.H, 1) if self.dt_tie else (self.H, self.N // 2)
             # Initialize log dt
             inv_dt = torch.rand(*shape, dtype=self.dtype) * (
                 math.log(self.dt_max) - math.log(self.dt_min)
             ) + math.log(self.dt_min)
-            if self.dt_transform != 'exp':
+            if self.dt_transform != "exp":
                 inv_dt = inv_transform(torch.exp(inv_dt), self.dt_transform)
 
         return inv_dt
@@ -842,8 +924,8 @@ class SSMKernel(Kernel):
         A, B = transition(self.init, self.N)
         A = torch.as_tensor(A, dtype=self.dtype)
         B = torch.as_tensor(B, dtype=self.dtype)[:, 0]
-        B = repeat(B, 'n -> v n', v=self.n_ssm).clone().contiguous()
-        A = repeat(A, 'n m -> v n m', v=self.n_ssm).clone().contiguous()
+        B = repeat(B, "n -> v n", v=self.n_ssm).clone().contiguous()
+        A = repeat(A, "n m -> v n m", v=self.n_ssm).clone().contiguous()
 
         # Generate C
         if self.deterministic:
@@ -856,27 +938,39 @@ class SSMKernel(Kernel):
 
     def init_ssm_dplr(self):
         """Returns DPLR (A, P, B, C) parameters for init options."""
-        A, P, B, V = combination(self.init, self.N, self.rank, self.n_ssm, **self.init_args)
+        A, P, B, V = combination(
+            self.init, self.N, self.rank, self.n_ssm, **self.init_args
+        )
 
         # Broadcast C to have H channels
         if self.deterministic:
             C = torch.zeros(self.channels, self.n_ssm, self.N, dtype=self.cdtype)
-            C[:, :, :1] = 1.
-            C = contract('hmn, chn -> chm', V.conj().transpose(-1, -2), C) # V^* C
-            C = repeat(C, 'c t n -> c (v t) n', v=self.H // C.size(-2)).clone().contiguous()
+            C[:, :, :1] = 1.0
+            C = contract("hmn, chn -> chm", V.conj().transpose(-1, -2), C)  # V^* C
+            C = (
+                repeat(C, "c t n -> c (v t) n", v=self.H // C.size(-2))
+                .clone()
+                .contiguous()
+            )
         else:
-            C = torch.randn(self.channels, self.H, self.N//2, dtype=self.cdtype)
+            C = torch.randn(self.channels, self.H, self.N // 2, dtype=self.cdtype)
 
         # Broadcast other parameters to have n_ssm copies
-        assert self.n_ssm % B.size(-2) == 0 \
-                and self.n_ssm % P.size(-2) == 0 \
-                and self.n_ssm % A.size(-2) == 0
+        assert (
+            self.n_ssm % B.size(-2) == 0
+            and self.n_ssm % P.size(-2) == 0
+            and self.n_ssm % A.size(-2) == 0
+        )
 
         # Broadcast tensors to n_ssm copies
         # These will be the parameters, so make sure tensors are materialized and contiguous
-        B = repeat(B, 't n -> (v t) n', v=self.n_ssm // B.size(-2)).clone().contiguous()
-        P = repeat(P, 'r t n -> r (v t) n', v=self.n_ssm // P.size(-2)).clone().contiguous()
-        A = repeat(A, 't n -> (v t) n', v=self.n_ssm // A.size(-2)).clone().contiguous()
+        B = repeat(B, "t n -> (v t) n", v=self.n_ssm // B.size(-2)).clone().contiguous()
+        P = (
+            repeat(P, "r t n -> r (v t) n", v=self.n_ssm // P.size(-2))
+            .clone()
+            .contiguous()
+        )
+        A = repeat(A, "t n -> (v t) n", v=self.n_ssm // A.size(-2)).clone().contiguous()
 
         # Because these complex parameterizations assume conjugate symmetry,
         # halve the value of self.N for convenience
@@ -900,7 +994,7 @@ class SSMKernel(Kernel):
         dt_min: float = 0.001,
         dt_max: float = 0.1,
         dt_tie: bool = True,
-        dt_transform: str = 'exp',
+        dt_transform: str = "exp",
         # (A, B, C) options
         rank: int = 1,
         n_ssm: Optional[int] = None,
@@ -909,7 +1003,14 @@ class SSMKernel(Kernel):
         # Extra hyperparameters for initialization
         **init_args,
     ):
-        super().__init__(d_model=d_model, channels=channels, l_max=l_max, lr=lr, wd=wd, verbose=verbose)
+        super().__init__(
+            d_model=d_model,
+            channels=channels,
+            l_max=l_max,
+            lr=lr,
+            wd=wd,
+            verbose=verbose,
+        )
         self.N = d_state
         self.dtype, self.cdtype = torch.float, torch.cfloat
         self.deterministic = deterministic
@@ -922,8 +1023,12 @@ class SSMKernel(Kernel):
         self.rank = rank
         self.n_ssm = n_ssm if n_ssm is not None else self.H
         if measure is not None:
-            log.warning("Warning: 'measure' option changed to 'init' and will be removed in a future version.")
-            assert init is None, "'measure' and 'init' cannot both be passed into SSMKernel"
+            log.warning(
+                "Warning: 'measure' option changed to 'init' and will be removed in a future version."
+            )
+            assert (
+                init is None
+            ), "'measure' and 'init' cannot both be passed into SSMKernel"
             init, measure = measure, init
         self.init = init
         self.init_args = init_args
@@ -944,17 +1049,19 @@ class SSMKernel(Kernel):
         """
 
         # Construct dA, dB matrices
-        dA, dB = self._setup_state() # (H N N) (H N)
+        dA, dB = self._setup_state()  # (H N N) (H N)
 
         conj = state.size(-1) != dA.size(-1)
-        if conj: state = _conj(state)
+        if conj:
+            state = _conj(state)
 
-        v = contract('h n, b h l -> b h n l', dB, u.flip(-1))
+        v = contract("h n, b h l -> b h n l", dB, u.flip(-1))
         AL, v = power(u.size(-1), dA, v)
         next_state = contract("h m n, b h n -> b h m", AL, state)
         next_state = next_state + v
 
-        if conj: next_state = next_state[..., : next_state.size(-1) // 2]
+        if conj:
+            next_state = next_state[..., : next_state.size(-1) // 2]
         return next_state
 
     def _setup_state(self):
@@ -971,7 +1078,7 @@ class SSMKernel(Kernel):
 
     @property
     def state_to_tensor(self):
-        return lambda state: rearrange('... h n -> ... (h n)', state)
+        return lambda state: rearrange("... h n -> ... (h n)", state)
 
 
 class SSMKernelDiag(SSMKernel):
@@ -991,18 +1098,18 @@ class SSMKernelDiag(SSMKernel):
 
     def __init__(
         self,
-        disc: str = 'zoh',  # Change to 'bilinear' to match S4, but should make little difference either way
+        disc: str = "zoh",  # Change to 'bilinear' to match S4, but should make little difference either way
         dt_fast: bool = False,
-        real_transform: str = 'exp',
-        imag_transform: str = 'none',
+        real_transform: str = "exp",
+        imag_transform: str = "none",
         bandlimit: Optional[float] = None,
-        backend: str = 'cuda',
+        backend: str = "cuda",
         is_real: bool = False,
         **kwargs,
     ):
         # Special case: for real-valued, d_state semantics change
-        if is_real and 'd_state' in kwargs:
-            kwargs['d_state'] = kwargs['d_state'] * 2
+        if is_real and "d_state" in kwargs:
+            kwargs["d_state"] = kwargs["d_state"] * 2
         super().__init__(**kwargs)
         self.disc = disc
         self.dt_fast = dt_fast
@@ -1038,14 +1145,17 @@ class SSMKernelDiag(SSMKernel):
         Note: tensor shape N here denotes half the true state size, because of conjugate symmetry
         """
 
-        assert self.backend in ['cuda', 'keops', 'naive']
+        assert self.backend in ["cuda", "keops", "naive"]
 
-        if self.dt_fast: inv_dt = torch.asinh(inv_dt)
+        if self.dt_fast:
+            inv_dt = torch.asinh(inv_dt)
 
         # Rank of low-rank correction
         assert self.H == inv_dt.size(0)
         assert self.N == A.size(-1) == B.size(-1) == C.size(-1)
-        assert self.n_ssm == A.size(-2) == B.size(-2) # Number of independent SSMs trained
+        assert (
+            self.n_ssm == A.size(-2) == B.size(-2)
+        )  # Number of independent SSMs trained
         self.repeat = self.H // A.size(0)
 
         # Check that diagonal part has negative real and imag part
@@ -1054,22 +1164,39 @@ class SSMKernelDiag(SSMKernel):
         assert torch.all(A.real < 1e-4) and torch.all(A.imag <= 0.0)
 
         # Broadcast everything to correct shapes
-        C = C.expand(torch.broadcast_shapes(C.shape, (1, self.H, self.N))) # (C, H, N)  # TODO originally this was only in DPLR, check safe for Diag
-        B = B.unsqueeze(0) # (1, H, N)
+        C = C.expand(
+            torch.broadcast_shapes(C.shape, (1, self.H, self.N))
+        )  # (C, H, N)  # TODO originally this was only in DPLR, check safe for Diag
+        B = B.unsqueeze(0)  # (1, H, N)
         assert self.channels == C.shape[0]
 
         # Register dt
-        self.register("inv_dt", inv_dt, self.lr_dict['dt'], self.wd_dict['dt'])
+        self.register("inv_dt", inv_dt, self.lr_dict["dt"], self.wd_dict["dt"])
         # Register ABC
         if self.is_real:
-            self.register("C", C.real, self.lr_dict['C'], None)
-            self.register("B", B.real, self.lr_dict['B'], self.wd_dict['B'])
-            self.register("A_real", inv_transform(-A.real, self.real_transform), self.lr_dict['A'], self.wd_dict['A'])
+            self.register("C", C.real, self.lr_dict["C"], None)
+            self.register("B", B.real, self.lr_dict["B"], self.wd_dict["B"])
+            self.register(
+                "A_real",
+                inv_transform(-A.real, self.real_transform),
+                self.lr_dict["A"],
+                self.wd_dict["A"],
+            )
         else:
-            self.register("C", _c2r(_resolve_conj(C)), self.lr_dict['C'], None)
-            self.register("B", _c2r(B), self.lr_dict['B'], self.wd_dict['B'])
-            self.register("A_real", inv_transform(-A.real, self.real_transform), self.lr_dict['A'], self.wd_dict['A'])
-            self.register("A_imag", inv_transform(-A.imag, self.imag_transform), self.lr_dict['A'], self.wd_dict['A'])
+            self.register("C", _c2r(_resolve_conj(C)), self.lr_dict["C"], None)
+            self.register("B", _c2r(B), self.lr_dict["B"], self.wd_dict["B"])
+            self.register(
+                "A_real",
+                inv_transform(-A.real, self.real_transform),
+                self.lr_dict["A"],
+                self.wd_dict["A"],
+            )
+            self.register(
+                "A_imag",
+                inv_transform(-A.imag, self.imag_transform),
+                self.lr_dict["A"],
+                self.wd_dict["A"],
+            )
 
     def _get_params(self, rate=1.0):
         """Process the internal parameters."""
@@ -1077,25 +1204,29 @@ class SSMKernelDiag(SSMKernel):
         # (S N) where S=n_ssm
         if self.is_real:
             A = -param_transform(self.A_real, self.real_transform)
-            B = self.B # (1 S N)
-            C = self.C # (C H N)
+            B = self.B  # (1 S N)
+            C = self.C  # (C H N)
         else:
-            A = -param_transform(self.A_real, self.real_transform) - 1j * param_transform(self.A_imag, self.imag_transform)
-            B = _r2c(self.B) # (1 S N)
-            C = _r2c(self.C) # (C H N)
+            A = -param_transform(
+                self.A_real, self.real_transform
+            ) - 1j * param_transform(self.A_imag, self.imag_transform)
+            B = _r2c(self.B)  # (1 S N)
+            C = _r2c(self.C)  # (C H N)
 
-        if self.dt_fast: inv_dt = torch.sinh(self.inv_dt)
-        else: inv_dt = self.inv_dt
-        dt = param_transform(inv_dt, self.dt_transform) * rate # (H N)
+        if self.dt_fast:
+            inv_dt = torch.sinh(self.inv_dt)
+        else:
+            inv_dt = self.inv_dt
+        dt = param_transform(inv_dt, self.dt_transform) * rate  # (H N)
 
         if self.bandlimit is not None:
-            freqs = dt / rate * A.imag.abs() / (2*math.pi) # (H N)
-            mask = torch.where(freqs < self.bandlimit * .5, 1, 0)
+            freqs = dt / rate * A.imag.abs() / (2 * math.pi)  # (H N)
+            mask = torch.where(freqs < self.bandlimit * 0.5, 1, 0)
             C = C * mask
 
         # Incorporate dt into A and B
-        A = repeat(A, 't n -> (v t) n', v=self.repeat)  # (H N)
-        B = repeat(B, 'b t n -> b (v t) n', v=self.repeat)  # (1 H N)
+        A = repeat(A, "t n -> (v t) n", v=self.repeat)  # (H N)
+        B = repeat(B, "b t n -> b (v t) n", v=self.repeat)  # (1 H N)
 
         # TODO: The downstream algorithm should only need to access dt*A
         # However the current DPLR kernel still uses dt and A separately
@@ -1113,100 +1244,113 @@ class SSMKernelDiag(SSMKernel):
         # Augment B with state
         if state is not None:
             s = state / dt
-            if self.disc == 'bilinear':
-                s = s * (1. + dtA/2)
-            elif self.disc == 'zoh':
-                s = s * dtA * dtA.exp() / (dtA.exp() - 1.)
-            B = torch.cat([s, B], dim=-3) # (1+B H N)
-
+            if self.disc == "bilinear":
+                s = s * (1.0 + dtA / 2)
+            elif self.disc == "zoh":
+                s = s * dtA * dtA.exp() / (dtA.exp() - 1.0)
+            B = torch.cat([s, B], dim=-3)  # (1+B H N)
 
         # Combine B and C
         C = (B[:, None, :, :] * C).view(-1, self.H, self.N)
 
         # Dispatch which Vandermonde kernel to use
-        if has_cuda_extension and C.dtype == torch.cfloat and C.device.type == 'cuda' and self.backend == 'cuda':
+        if (
+            has_cuda_extension
+            and C.dtype == torch.cfloat
+            and C.device.type == "cuda"
+            and self.backend == "cuda"
+        ):
             log_vandermonde = log_vandermonde_cuda
-        elif has_pykeops and self.backend in ['cuda', 'keops']:
+        elif has_pykeops and self.backend in ["cuda", "keops"]:
             log_vandermonde = log_vandermonde_keops
         else:
             log_vandermonde = log_vandermonde_naive
 
         # Main kernel
-        if self.disc == 'zoh':
+        if self.disc == "zoh":
             # Power up
-            C = C * (torch.exp(dtA)-1.) / A
-            K = log_vandermonde(C, dtA, L) # (H L)
-        elif self.disc == 'bilinear':
-            C = C * (1. - dtA/2).reciprocal() * dt # or * dtA / A
-            dA = (1. + dtA/2) / (1. - dtA/2)
+            C = C * (torch.exp(dtA) - 1.0) / A
+            K = log_vandermonde(C, dtA, L)  # (H L)
+        elif self.disc == "bilinear":
+            C = C * (1.0 - dtA / 2).reciprocal() * dt  # or * dtA / A
+            dA = (1.0 + dtA / 2) / (1.0 - dtA / 2)
             K = log_vandermonde(C, dA.log(), L)
-        elif self.disc == 'dss':
+        elif self.disc == "dss":
             # Implementation from DSS meant for case when real eigenvalues can be positive
-            P = dtA.unsqueeze(-1) * torch.arange(L, device=C.device) # [H N L]
-            A_gt_0 = A.real > 0                                      # [N]
+            P = dtA.unsqueeze(-1) * torch.arange(L, device=C.device)  # [H N L]
+            A_gt_0 = A.real > 0  # [N]
             if A_gt_0.any():
                 with torch.no_grad():
-                    P_max = dtA * (A_gt_0 * (L-1))                   # [H N]
-                P = P - P_max.unsqueeze(-1)                          # [H N L]
-            S = P.exp()                                              # [H N L]
+                    P_max = dtA * (A_gt_0 * (L - 1))  # [H N]
+                P = P - P_max.unsqueeze(-1)  # [H N L]
+            S = P.exp()  # [H N L]
 
-            dtA_neg = dtA * (1 - 2*A_gt_0)                           # [H N]
-            num = dtA_neg.exp() - 1                                  # [H N]
-            den = (dtA_neg * L).exp() - 1                            # [H N]
+            dtA_neg = dtA * (1 - 2 * A_gt_0)  # [H N]
+            num = dtA_neg.exp() - 1  # [H N]
+            den = (dtA_neg * L).exp() - 1  # [H N]
 
             # Inline reciprocal function for DSS logic
             x = den * A
             x_conj = _resolve_conj(x)
-            r = x_conj / (x*x_conj + 1e-7)
+            r = x_conj / (x * x_conj + 1e-7)
 
-            C = C * num * r             # [C H N]
-            K = contract('chn,hnl->chl', C, S).float()
-        else: raise ValueError(f"Discretization {self.disc} not supported")
+            C = C * num * r  # [C H N]
+            K = contract("chn,hnl->chl", C, S).float()
+        else:
+            raise ValueError(f"Discretization {self.disc} not supported")
 
-        K = K.view(-1, self.channels, self.H, L) # (1+B C H L)
+        K = K.view(-1, self.channels, self.H, L)  # (1+B C H L)
 
         if state is not None:
-            K_state = K[:-1, :, :, :] # (B C H L)
+            K_state = K[:-1, :, :, :]  # (B C H L)
         else:
             K_state = None
-        K = K[-1, :, :, :] # (C H L)
+        K = K[-1, :, :, :]  # (C H L)
 
         return K, K_state
 
     def _setup_step(self):
         """Set up dA, dB, dC discretized parameters for stepping."""
 
-        dt, A, B, C, = self._get_params()
+        (
+            dt,
+            A,
+            B,
+            C,
+        ) = self._get_params()
         # Incorporate dt into A
         dtA = dt * A  # (H N)
 
-        if self.disc == 'zoh':
-            self.dA = torch.exp(dtA) # (H N)
-            self.dB = B * (torch.exp(dtA)-1.) / A # (C H N)
-        elif self.disc == 'bilinear':
-            self.dA = (1. + dtA/2) / (1. - dtA/2)
-            self.dB = B * (1. - dtA/2).reciprocal() * dt # or * dtA / A
-        self.dB = rearrange(self.dB, '1 h n -> h n')
+        if self.disc == "zoh":
+            self.dA = torch.exp(dtA)  # (H N)
+            self.dB = B * (torch.exp(dtA) - 1.0) / A  # (C H N)
+        elif self.disc == "bilinear":
+            self.dA = (1.0 + dtA / 2) / (1.0 - dtA / 2)
+            self.dB = B * (1.0 - dtA / 2).reciprocal() * dt  # or * dtA / A
+        self.dB = rearrange(self.dB, "1 h n -> h n")
         self.dC = C
 
     def default_state(self, *batch_shape):
         C = _r2c(self.C)
-        state = torch.zeros(*batch_shape, self.H, self.N, dtype=C.dtype, device=C.device)
+        state = torch.zeros(
+            *batch_shape, self.H, self.N, dtype=C.dtype, device=C.device
+        )
         return state
 
     def step(self, u, state):
-        next_state = contract("h n, b h n -> b h n", self.dA, state) \
-                + contract("h n, b h -> b h n", self.dB, u)
+        next_state = contract("h n, b h n -> b h n", self.dA, state) + contract(
+            "h n, b h -> b h n", self.dB, u
+        )
         y = contract("c h n, b h n -> b c h", self.dC, next_state)
-        return 2*y.real, next_state
+        return 2 * y.real, next_state
 
     def forward_state(self, u, state):
         """Pass the state forward through an entire sequence."""
         self._setup_step()
         AL = self.dA ** u.size(-1)
-        u = u.flip(-1).to(self.dA).contiguous() # (B H L)
+        u = u.flip(-1).to(self.dA).contiguous()  # (B H L)
         # Dispatch which Vandermonde kernel to use
-        if has_pykeops and self.backend in ['cuda', 'keops']:
+        if has_pykeops and self.backend in ["cuda", "keops"]:
             log_vandermonde_transpose = log_vandermonde_transpose_keops
         else:
             log_vandermonde_transpose = log_vandermonde_transpose_naive
@@ -1226,13 +1370,18 @@ class SSMKernelDPLR(SSMKernelDiag):
         """
 
         if self.l_kernel.item() == 0:
-            if self.verbose: log.info(f"S4: Initializing kernel to length {L}")
+            if self.verbose:
+                log.info(f"S4: Initializing kernel to length {L}")
             double_length = False
-        elif L > self.l_kernel.item(): # 2*int(self.l_kernel) == L:
-            if self.verbose: log.info(f"S4: Doubling length from L = {self.l_kernel.item()} to {2*self.l_kernel.item()}")
+        elif L > self.l_kernel.item():  # 2*int(self.l_kernel) == L:
+            if self.verbose:
+                log.info(
+                    f"S4: Doubling length from L = {self.l_kernel.item()} to {2*self.l_kernel.item()}"
+                )
             double_length = True
-            L = self.l_kernel.item() # Convenience for the math below
-        else: return
+            L = self.l_kernel.item()  # Convenience for the math below
+        else:
+            return
 
         C = _r2c(self.C)
         dA, _ = self._setup_state()
@@ -1240,12 +1389,15 @@ class SSMKernelDPLR(SSMKernelDiag):
         # Multiply C by I - dA_L
         C_ = _conj(C)
         prod = contract("h m n, c h n -> c h m", dA_L.transpose(-1, -2), C_)
-        if double_length: prod = -prod # Multiply by I + dA_L instead
+        if double_length:
+            prod = -prod  # Multiply by I + dA_L instead
         C_ = C_ - prod
-        C_ = C_[..., :self.N] # Take conjugate pairs again
+        C_ = C_[..., : self.N]  # Take conjugate pairs again
         self.C.copy_(_c2r(C_))
 
-        self.l_kernel = 2*self.l_kernel if double_length else self.l_kernel+L # Preserve type/device
+        self.l_kernel = (
+            2 * self.l_kernel if double_length else self.l_kernel + L
+        )  # Preserve type/device
 
     def _omega(self, L, dtype, device, cache=True):
         """Calculate (and cache) FFT nodes.
@@ -1255,7 +1407,7 @@ class SSMKernelDPLR(SSMKernelDiag):
         """
 
         # Use cached if available
-        if cache and hasattr(self, 'omega') and self.omega.size(-1) == L//2+1:
+        if cache and hasattr(self, "omega") and self.omega.size(-1) == L // 2 + 1:
             return self.omega, self.z
 
         omega = torch.tensor(
@@ -1269,7 +1421,6 @@ class SSMKernelDPLR(SSMKernelDiag):
             self.omega = omega
             self.z = z
         return omega, z
-
 
     def register_params(self, A, B, C, inv_dt, P):
         """Process the initialization into form of trainable parameters.
@@ -1311,15 +1462,15 @@ class SSMKernelDPLR(SSMKernelDiag):
         assert self.N == P.size(-1)
         assert self.n_ssm == P.size(-2)
 
-        self.register('P', _c2r(P), self.lr_dict['A'], self.wd_dict['A'])
+        self.register("P", _c2r(P), self.lr_dict["A"], self.wd_dict["A"])
 
         # Track the current kernel length this is "attuned" to
-        self.register_buffer('l_kernel', torch.tensor(0))
+        self.register_buffer("l_kernel", torch.tensor(0))
 
     def _get_params(self, rate=1.0):
         dt, A, B, C = super()._get_params(rate=rate)
         P = _r2c(self.P)  # (R S N)
-        P = repeat(P, 'r t n -> r (v t) n', v=self.repeat)  # (R H N)
+        P = repeat(P, "r t n -> r (v t) n", v=self.repeat)  # (R H N)
         Q = P.conj()
 
         return dt, A, B, C, P, Q
@@ -1337,15 +1488,17 @@ class SSMKernelDPLR(SSMKernelDiag):
             L = round(self.l_kernel.item() / rate)
 
         # Increase the internal length if needed
-        continuous_L = round(rate*L)
+        continuous_L = round(rate * L)
         while continuous_L > self.l_kernel.item():
             self._setup_C(continuous_L)
-        discrete_L = round(self.l_kernel.item()/rate)
+        discrete_L = round(self.l_kernel.item() / rate)
 
         dt, A, B, C, P, Q = self._get_params(rate)
 
         # Get FFT nodes of right length
-        omega, z = self._omega(discrete_L, dtype=A.dtype, device=A.device, cache=(rate==1.0))
+        omega, z = self._omega(
+            discrete_L, dtype=A.dtype, device=A.device, cache=(rate == 1.0)
+        )
 
         # Augment B
         if state is not None:
@@ -1353,13 +1506,12 @@ class SSMKernelDPLR(SSMKernelDiag):
             # Compute 1/dt * (I + dt/2 A) @ state
 
             # Can do this without expanding (maybe minor speedup using conj symmetry in theory), but it's easier to read this way
-            s = _conj(state) if state.size(-1) == self.N else state # (B H N)
-            sA = (
-                s * _conj(A) # (B H N)
-                - contract('bhm, rhm, rhn -> bhn', s, _conj(Q), _conj(P))
+            s = _conj(state) if state.size(-1) == self.N else state  # (B H N)
+            sA = s * _conj(A) - contract(  # (B H N)
+                "bhm, rhm, rhn -> bhn", s, _conj(Q), _conj(P)
             )
             s = s / dt + sA / 2
-            s = s[..., :self.N]
+            s = s[..., : self.N]
 
             B = torch.cat([s, B], dim=-3)  # (B+1, H, N)
 
@@ -1367,17 +1519,22 @@ class SSMKernelDPLR(SSMKernelDiag):
         A = A * dt  # (H N)
 
         # Stack B and p, C and q for convenient batching
-        B = torch.cat([B, P], dim=-3) # (B+1+R, H, N)
-        C = torch.cat([C, Q], dim=-3) # (C+R, H, N)
+        B = torch.cat([B, P], dim=-3)  # (B+1+R, H, N)
+        C = torch.cat([C, Q], dim=-3)  # (C+R, H, N)
 
         # Incorporate B and C batch dimensions
         v = B.unsqueeze(-3) * C.unsqueeze(-4)  # (B+1+R, C+R, H, N)
         v = v * dt  # Incorporate dt into B
 
         # Dispatch which Cauchy kernel to use
-        if has_cuda_extension and z.dtype == torch.cfloat and z.device.type == 'cuda' and self.kernel == 'cuda':
+        if (
+            has_cuda_extension
+            and z.dtype == torch.cfloat
+            and z.device.type == "cuda"
+            and self.kernel == "cuda"
+        ):
             cauchy_mult = cauchy_cuda
-        elif has_pykeops and self.kernel in ['cuda', 'keops']:
+        elif has_pykeops and self.kernel in ["cuda", "keops"]:
             cauchy_mult = cauchy_keops
         else:
             cauchy_mult = cauchy_naive
@@ -1386,13 +1543,17 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         # Low-rank Woodbury correction
         if self.rank == 1:
-            k_f = r[:-1, :-1, :, :] - r[:-1, -1:, :, :] * r[-1:, :-1, :, :] / (1 + r[-1:, -1:, :, :])
+            k_f = r[:-1, :-1, :, :] - r[:-1, -1:, :, :] * r[-1:, :-1, :, :] / (
+                1 + r[-1:, -1:, :, :]
+            )
         elif self.rank == 2:
             r00 = r[: -self.rank, : -self.rank, :, :]
             r01 = r[: -self.rank, -self.rank :, :, :]
             r10 = r[-self.rank :, : -self.rank, :, :]
             r11 = r[-self.rank :, -self.rank :, :, :]
-            det = (1 + r11[:1, :1, :, :]) * (1 + r11[1:, 1:, :, :]) - r11[:1, 1:, :, :] * r11[1:, :1, :, :]
+            det = (1 + r11[:1, :1, :, :]) * (1 + r11[1:, 1:, :, :]) - r11[
+                :1, 1:, :, :
+            ] * r11[1:, :1, :, :]
             s = (
                 r01[:, :1, :, :] * (1 + r11[1:, 1:, :, :]) * r10[:1, :, :, :]
                 + r01[:, 1:, :, :] * (1 + r11[:1, :1, :, :]) * r10[1:, :, :, :]
@@ -1402,14 +1563,16 @@ class SSMKernelDPLR(SSMKernelDiag):
             s = s / det
             k_f = r00 - s
         else:
-            r00 = r[:-self.rank, :-self.rank, :, :]
-            r01 = r[:-self.rank, -self.rank:, :, :]
-            r10 = r[-self.rank:, :-self.rank, :, :]
-            r11 = r[-self.rank:, -self.rank:, :, :]
+            r00 = r[: -self.rank, : -self.rank, :, :]
+            r01 = r[: -self.rank, -self.rank :, :, :]
+            r10 = r[-self.rank :, : -self.rank, :, :]
+            r11 = r[-self.rank :, -self.rank :, :, :]
             r11 = rearrange(r11, "a b h n -> h n a b")
             r11 = torch.linalg.inv(torch.eye(self.rank, device=r.device) + r11)
             r11 = rearrange(r11, "h n a b -> a b h n")
-            k_f = r00 - torch.einsum("i j h n, j k h n, k l h n -> i l h n", r01, r11, r10)
+            k_f = r00 - torch.einsum(
+                "i j h n, j k h n, k l h n -> i l h n", r01, r11, r10
+            )
 
         # Final correction for the bilinear transform
         k_f = k_f * 2 / (1 + omega)
@@ -1424,13 +1587,13 @@ class SSMKernelDPLR(SSMKernelDiag):
             k_state = k[:-1, :, :, :]  # (B, C, H, L)
         else:
             k_state = None
-        k_B = k[-1, :, :, :] # (C H L)
+        k_B = k[-1, :, :, :]  # (C H L)
 
         return k_B, k_state
 
     @torch.no_grad()
     def double_length(self):
-        self._setup_C(2*self.l_kernel)
+        self._setup_C(2 * self.l_kernel)
 
     @torch.no_grad()
     def _check(self):
@@ -1444,7 +1607,7 @@ class SSMKernelDPLR(SSMKernelDiag):
         K_ = krylov(self.l_max, self.dA, self.dB, self.dC)
 
         diff = K - K_
-        print("checking DPLR Kernel construction", torch.sum(diff ** 2))
+        print("checking DPLR Kernel construction", torch.sum(diff**2))
 
     @torch.no_grad()
     def _setup_linear(self):
@@ -1453,21 +1616,29 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         # Prepare Linear stepping
         D = (2.0 / dt - A).reciprocal()  # (H, N)
-        R = (torch.eye(self.rank, dtype=A.dtype, device=A.device) + 2*contract('r h n, h n, s h n -> h r s', Q, D, P).real) # (H R R)
-        Q_D = rearrange(Q*D, 'r h n -> h r n')
+        R = (
+            torch.eye(self.rank, dtype=A.dtype, device=A.device)
+            + 2 * contract("r h n, h n, s h n -> h r s", Q, D, P).real
+        )  # (H R R)
+        Q_D = rearrange(Q * D, "r h n -> h r n")
         try:
-            R = torch.linalg.solve(R, Q_D) # (H R N)
+            R = torch.linalg.solve(R, Q_D)  # (H R N)
         except:
-            R = torch.tensor(np.linalg.solve(R.to(Q_D).contiguous().detach().cpu(), Q_D.contiguous().detach().cpu())).to(Q_D)
-        R = rearrange(R, 'h r n -> r h n')
+            R = torch.tensor(
+                np.linalg.solve(
+                    R.to(Q_D).contiguous().detach().cpu(),
+                    Q_D.contiguous().detach().cpu(),
+                )
+            ).to(Q_D)
+        R = rearrange(R, "h r n -> r h n")
 
         self.step_params = {
-            "D": D, # (H N)
-            "R": R, # (R H N)
-            "P": P, # (R H N)
-            "Q": Q, # (R H N)
-            "B": B, # (1 H N)
-            "E": 2.0 / dt + A, # (H N)
+            "D": D,  # (H N)
+            "R": R,  # (R H N)
+            "P": P,  # (R H N)
+            "Q": Q,  # (R H N)
+            "B": B,  # (1 H N)
+            "E": 2.0 / dt + A,  # (H N)
         }
 
     def _step_state_linear(self, u=None, state=None):
@@ -1482,21 +1653,29 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         Returns: same shape as state
         """
-        C = _r2c(self.C) # View used for dtype/device
+        C = _r2c(self.C)  # View used for dtype/device
 
-        if u is None: # Special case used to find dA
+        if u is None:  # Special case used to find dA
             u = torch.zeros(self.H, dtype=C.dtype, device=C.device)
-        if state is None: # Special case used to find dB
+        if state is None:  # Special case used to find dB
             state = torch.zeros(self.H, self.N, dtype=C.dtype, device=C.device)
 
         step_params = self.step_params.copy()
-        if state.size(-1) == self.N: # Only store half of the conjugate pairs; should be true by default
+        if (
+            state.size(-1) == self.N
+        ):  # Only store half of the conjugate pairs; should be true by default
             # There should be a slightly faster way using conjugate symmetry
-            contract_fn = lambda p, x, y: contract('r h n, r h m, ... h m -> ... h n', _conj(p), _conj(x), _conj(y))[..., :self.N] # inner outer product
+            contract_fn = lambda p, x, y: contract(
+                "r h n, r h m, ... h m -> ... h n", _conj(p), _conj(x), _conj(y)
+            )[
+                ..., : self.N
+            ]  # inner outer product
         else:
-            assert state.size(-1) == 2*self.N
+            assert state.size(-1) == 2 * self.N
             step_params = {k: _conj(v) for k, v in step_params.items()}
-            contract_fn = lambda p, x, y: contract('r h n, r h m, ... h m -> ... h n', p, x, y) # inner outer product
+            contract_fn = lambda p, x, y: contract(
+                "r h n, r h m, ... h m -> ... h n", p, x, y
+            )  # inner outer product
         D = step_params["D"]  # (H N)
         E = step_params["E"]  # (H N)
         R = step_params["R"]  # (R H N)
@@ -1504,7 +1683,7 @@ class SSMKernelDPLR(SSMKernelDiag):
         Q = step_params["Q"]  # (R H N)
         B = step_params["B"]  # (1 H N)
 
-        new_state = E * state - contract_fn(P, Q, state) # (B H N)
+        new_state = E * state - contract_fn(P, Q, state)  # (B H N)
         new_state = new_state + 2.0 * B * u.unsqueeze(-1)  # (B H N)
         new_state = D * (new_state - contract_fn(P, R, new_state))
 
@@ -1515,30 +1694,33 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         # Construct dA and dB by using the stepping
         self._setup_linear()
-        C = _r2c(self.C) # Just returns a view that we use for finding dtype/device
+        C = _r2c(self.C)  # Just returns a view that we use for finding dtype/device
 
-        state = torch.eye(2*self.N, dtype=C.dtype, device=C.device).unsqueeze(-2) # (N 1 N)
+        state = torch.eye(2 * self.N, dtype=C.dtype, device=C.device).unsqueeze(
+            -2
+        )  # (N 1 N)
         dA = self._step_state_linear(state=state)
         dA = rearrange(dA, "n h m -> h m n")
 
         u = C.new_ones(self.H)
         dB = self._step_state_linear(u=u)
         dB = _conj(dB)
-        dB = rearrange(dB, '1 h n -> h n') # (H N)
+        dB = rearrange(dB, "1 h n -> h n")  # (H N)
         return dA, dB
 
     def _step_state(self, u, state):
         """Must be called after self.default_state() is used to construct an initial state!"""
-        next_state = (torch.einsum(self.state_contraction, self.dA, state)
-                     + torch.einsum(self.input_contraction, self.dB, u))
+        next_state = torch.einsum(
+            self.state_contraction, self.dA, state
+        ) + torch.einsum(self.input_contraction, self.dB, u)
         return next_state
 
-    def _setup_step(self, mode='dense'):
+    def _setup_step(self, mode="dense"):
         """Set up dA, dB, dC discretized parameters for stepping."""
         self.dA, self.dB = self._setup_state()
 
         # Calculate original C
-        C = _conj(_r2c(self.C)) # (H C N)
+        C = _conj(_r2c(self.C))  # (H C N)
         if self.l_kernel.item() == 0:
             dC = C
         else:
@@ -1555,26 +1737,32 @@ class SSMKernelDPLR(SSMKernelDiag):
         # Do special preprocessing for different step modes
 
         self._step_mode = mode
-        if mode == 'linear':
+        if mode == "linear":
             # Linear case: special step function for the state, we need to handle output
             # use conjugate symmetry by default, which affects the output projection
-            self.dC = 2*self.dC[:, :, :self.N]
-        elif mode == 'diagonal':
+            self.dC = 2 * self.dC[:, :, : self.N]
+        elif mode == "diagonal":
             # Eigendecomposition of the A matrix
             L, V = torch.linalg.eig(self.dA)
             V_inv = torch.linalg.inv(V)
             # Check that the eigendedecomposition is correct
             if self.verbose:
-                print("Diagonalization error:", torch.dist(V @ torch.diag_embed(L) @ V_inv, self.dA))
+                print(
+                    "Diagonalization error:",
+                    torch.dist(V @ torch.diag_embed(L) @ V_inv, self.dA),
+                )
 
             # Change the parameterization to diagonalize
             self.dA = L
-            self.dB = contract('h n m, h m -> h n', V_inv, self.dB)
-            self.dC = contract('h n m, c h n -> c h m', V, self.dC)
+            self.dB = contract("h n m, h m -> h n", V_inv, self.dB)
+            self.dC = contract("h n m, c h n -> c h m", V, self.dC)
 
-        elif mode == 'dense':
+        elif mode == "dense":
             pass
-        else: raise NotImplementedError("DPLR Kernel step mode must be {'dense' | 'linear' | 'diagonal'}")
+        else:
+            raise NotImplementedError(
+                "DPLR Kernel step mode must be {'dense' | 'linear' | 'diagonal'}"
+            )
 
     def default_state(self, *batch_shape):
         C = _r2c(self.C)
@@ -1583,11 +1771,13 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         # Cache the tensor contractions we will later do, for efficiency
         # These are put in this function because they depend on the batch size
-        step_mode = getattr(self, "_step_mode", "dense")  # Used in default_state, which is called without _setup_step() in forward_state()
-        if step_mode != 'linear':
+        step_mode = getattr(
+            self, "_step_mode", "dense"
+        )  # Used in default_state, which is called without _setup_step() in forward_state()
+        if step_mode != "linear":
             N *= 2
 
-            if step_mode == 'diagonal':
+            if step_mode == "diagonal":
                 self.state_contraction = "h n, ... h n -> ... h n"
             else:
                 # Dense (quadratic) case: expand all terms
@@ -1603,7 +1793,7 @@ class SSMKernelDPLR(SSMKernelDiag):
     def step(self, u, state):
         """Must have called self._setup_step() and created state with self.default_state() before calling this."""
 
-        if self._step_mode == 'linear':
+        if self._step_mode == "linear":
             new_state = self._step_state_linear(u, state)
         else:
             new_state = self._step_state(u, state)
@@ -1622,13 +1812,15 @@ class SSMKernelDPLR(SSMKernelDiag):
 
         return SSMKernel.forward_state(self, *args, **kwargs)
 
+
 kernel_registry = {
-    's4d': SSMKernelDiag,
-    'diag': SSMKernelDiag,
-    's4': SSMKernelDPLR,
-    'nplr': SSMKernelDPLR,
-    'dplr': SSMKernelDPLR,
+    "s4d": SSMKernelDiag,
+    "diag": SSMKernelDiag,
+    "s4": SSMKernelDPLR,
+    "nplr": SSMKernelDPLR,
+    "dplr": SSMKernelDPLR,
 }
+
 
 class FFTConv(nn.Module):
     """Implements an FFT Convolution around a convolution kernel.
@@ -1651,12 +1843,12 @@ class FFTConv(nn.Module):
         channels=1,
         swap_channels=False,
         bidirectional=False,
-        activation='gelu', # Activation after layer
+        activation="gelu",  # Activation after layer
         transposed=True,
         dropout=0.0,
         tie_dropout=False,
         drop_kernel=0.0,
-        mode='dplr',
+        mode="dplr",
         kernel=None,
         **kernel_args,  # Arguments passed into inner convolution kernel
     ):
@@ -1668,8 +1860,7 @@ class FFTConv(nn.Module):
         self.transposed = transposed
         self.swap_channels = swap_channels
 
-
-        if activation is not None and activation.startswith('glu'):
+        if activation is not None and activation.startswith("glu"):
             channels *= 2
         self.activation = Activation(activation, dim=1 if self.transposed else -1)
 
@@ -1696,26 +1887,32 @@ class FFTConv(nn.Module):
 
         dropout_fn = DropoutNd if tie_dropout else nn.Dropout
         self.drop = dropout_fn(dropout) if dropout > 0.0 else nn.Identity()
-        self.drop_kernel = nn.Dropout(drop_kernel) if drop_kernel > 0.0 else nn.Identity()
+        self.drop_kernel = (
+            nn.Dropout(drop_kernel) if drop_kernel > 0.0 else nn.Identity()
+        )
 
-    def forward(self, x, state=None, rate=1.0, **kwargs): # absorbs return_output and transformer src mask
+    def forward(
+        self, x, state=None, rate=1.0, **kwargs
+    ):  # absorbs return_output and transformer src mask
         """
         x: (B D L) if self.transposed else (B L D)
         """
 
         # Always work with (B D L) dimension in this module
-        if not self.transposed: x = x.transpose(-1, -2)
+        if not self.transposed:
+            x = x.transpose(-1, -2)
         L = x.size(-1)
 
         # Compute SS Kernel
         l_kernel = L if self.L is None else min(L, round(self.L / rate))
-        k, k_state =  self.kernel(L=l_kernel, rate=rate, state=state) # (C H L) (B C H L)
+        k, k_state = self.kernel(
+            L=l_kernel, rate=rate, state=state
+        )  # (C H L) (B C H L)
 
         # Convolution
         if self.bidirectional:
-            k0, k1 = rearrange(k, '(s c) h l -> s c h l', s=2)
-            k = F.pad(k0, (0, L)) \
-                    + F.pad(k1.flip(-1), (L, 0))
+            k0, k1 = rearrange(k, "(s c) h l -> s c h l", s=2)
+            k = F.pad(k0, (0, L)) + F.pad(k1.flip(-1), (L, 0))
             # The above has an off-by-one in the reverse direction
             # This is a deliberate choice since the off-by-one should not affect any applications
             # This can be amended which may be very slightly slower
@@ -1728,52 +1925,52 @@ class FFTConv(nn.Module):
 
         # In principle, we could pad to l_kernel+L-1 instead of l_kernel+L, but we choose the latter for
         # equational simplicity. Additionally, we have not experimented to compare the efficiency of the two.
-        k_f = torch.fft.rfft(k, n=l_kernel+L) # (C H L)
-        x_f = torch.fft.rfft(x, n=l_kernel+L) # (B H L)
-        y_f = contract('bhl,chl->bchl', x_f, k_f)
-        y = torch.fft.irfft(y_f, n=l_kernel+L)[..., :L] # (B C H L)
-
+        k_f = torch.fft.rfft(k, n=l_kernel + L)  # (C H L)
+        x_f = torch.fft.rfft(x, n=l_kernel + L)  # (B H L)
+        y_f = contract("bhl,chl->bchl", x_f, k_f)
+        y = torch.fft.irfft(y_f, n=l_kernel + L)[..., :L]  # (B C H L)
 
         # Compute D term in state space equation - essentially a skip connection
-        y = y + contract('bhl,ch->bchl', x, self.D)
+        y = y + contract("bhl,ch->bchl", x, self.D)
 
         # Compute state update
         if state is not None:
-            assert not self.bidirectional, "Bidirectional not supported with state forwarding"
-            y = y + k_state #
+            assert (
+                not self.bidirectional
+            ), "Bidirectional not supported with state forwarding"
+            y = y + k_state  #
             next_state = self.kernel.forward_state(x, state)
         else:
             next_state = None
 
-
         # Reshape to flatten channels
         if self.swap_channels:
-            y = rearrange(y, 'b c h l -> b (h c) l')
+            y = rearrange(y, "b c h l -> b (h c) l")
         else:
-            y = rearrange(y, 'b c h l -> b (c h) l')
+            y = rearrange(y, "b c h l -> b (c h) l")
 
         y = self.drop(y)  # DropoutNd better with transposed=True
 
-        if not self.transposed: y = y.transpose(-1, -2)
+        if not self.transposed:
+            y = y.transpose(-1, -2)
         y = self.activation(y)
 
         return y, next_state
-
 
     def setup_step(self, **kwargs):
         self.kernel._setup_step(**kwargs)
 
     def step(self, x, state):
-        """ Step one time step as a recurrent model. Intended to be used during validation.
+        """Step one time step as a recurrent model. Intended to be used during validation.
 
         x: (B H)
         state: (B H N)
         Returns: output (B H), state (B H N)
         """
 
-        y, next_state = self.kernel.step(x, state) # (B C H)
+        y, next_state = self.kernel.step(x, state)  # (B C H)
         y = y + x.unsqueeze(-2) * self.D
-        y = rearrange(y, 'b c h -> b (c h)')
+        y = rearrange(y, "b c h -> b (c h)")
         y = self.activation(y)
         return y, next_state
 
@@ -1813,7 +2010,7 @@ class S4Block(nn.Module):
         gate=None,
         gate_act=None,
         mult_act=None,
-        final_act='glu',
+        final_act="glu",
         postact=None,
         initializer=None,
         weight_norm=False,
@@ -1850,7 +2047,7 @@ class S4Block(nn.Module):
             )
             if self.layer.d_output != self.d_model * gate:
                 self.output_gate = LinearActivation(
-                    self.d_model*self.channels,
+                    self.d_model * self.channels,
                     self.d_model * gate,
                     transposed=False,
                     activation=None,
@@ -1861,7 +2058,13 @@ class S4Block(nn.Module):
         # But the options here are all agnostic to the inner block
         # If other types of inner layers are desired, it is easy
         # to add an option to swap a different module in
-        self.layer = FFTConv(d_model, transposed=False, dropout=dropout, tie_dropout=tie_dropout, **layer_args)
+        self.layer = FFTConv(
+            d_model,
+            transposed=False,
+            dropout=dropout,
+            tie_dropout=tie_dropout,
+            **layer_args,
+        )
 
         # Pointwise operations
 
@@ -1874,29 +2077,32 @@ class S4Block(nn.Module):
         # position-wise output transform to mix features
         if postact is not None:
             assert final_act is None
-            log.warning("Warning: 'postact' option changed to 'final_act' and will be removed in a future version.")
+            log.warning(
+                "Warning: 'postact' option changed to 'final_act' and will be removed in a future version."
+            )
             final_act, postact = postact, final_act
         if final_act is None:
             self.output_linear = nn.Identity()
         else:
             self.output_linear = LinearActivation(
-                self.d_model*gate if gate is not None else self.layer.d_output,
+                self.d_model * gate if gate is not None else self.layer.d_output,
                 self.d_model,
                 transposed=False,
                 activation=final_act,
                 activate=True,
             )
 
-
-
-    def forward(self, x, lengths=None, **kwargs): # absorbs return_output and transformer src mask
+    def forward(
+        self, x, lengths=None, **kwargs
+    ):  # absorbs return_output and transformer src mask
         """
         x: (B H L) if self.transposed else (B L H)
         state: (H N) never needed unless you know what you're doing
 
         Returns: same shape as x
         """
-        if self.transposed: x = rearrange(x, 'b d ... -> b ... d')
+        if self.transposed:
+            x = rearrange(x, "b d ... -> b ... d")
         L = x.size(1)
 
         # Mask out padding tokens
@@ -1907,8 +2113,17 @@ class S4Block(nn.Module):
             else:
                 lengths = None
         if lengths is not None:
-            assert isinstance(lengths, torch.Tensor) and lengths.ndim == 1 and lengths.size(0) in [1, x.size(0)]
-            mask = torch.where(torch.arange(L, device=lengths.device)[:, None] < lengths[:, None, None], 1., 0.)
+            assert (
+                isinstance(lengths, torch.Tensor)
+                and lengths.ndim == 1
+                and lengths.size(0) in [1, x.size(0)]
+            )
+            mask = torch.where(
+                torch.arange(L, device=lengths.device)[:, None]
+                < lengths[:, None, None],
+                1.0,
+                0.0,
+            )
             x = x * mask
 
         if self.gate is not None:
@@ -1918,7 +2133,6 @@ class S4Block(nn.Module):
 
         y, state = self.layer(x, **kwargs)
 
-
         if self.gate is not None:
             y = self.output_gate(y)
             y = y * v
@@ -1926,7 +2140,8 @@ class S4Block(nn.Module):
         y = self.drop(y)
         y = self.output_linear(y)
 
-        if self.transposed: y = rearrange(y, 'b d ... -> b ... d')
+        if self.transposed:
+            y = rearrange(y, "b d ... -> b ... d")
 
         return y, state
 
@@ -1945,7 +2160,7 @@ class S4Block(nn.Module):
             v = self.input_gate(x)
         if self.bottleneck is not None:
             x = self.input_linear(x)
-        y, next_state = self.layer.step(x, state) # (B C H)
+        y, next_state = self.layer.step(x, state)  # (B C H)
         if self.gate is not None:
             y = self.output_gate(y)
             y = y * v

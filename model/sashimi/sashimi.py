@@ -8,7 +8,8 @@ It's Raw! Audio Generation with State-Space Models
 Karan Goel, Albert Gu, Chris Donahue, Christopher Re.
 """
 import sys
-sys.path.append('../')
+
+sys.path.append("../")
 
 import torch
 import torch.nn as nn
@@ -17,6 +18,7 @@ import torch.nn.functional as F
 from einops import rearrange
 
 from .s4 import LinearActivation, S4Block as S4
+
 
 class DownPool(nn.Module):
     def __init__(self, d_input, expand, pool):
@@ -31,7 +33,7 @@ class DownPool(nn.Module):
         )
 
     def forward(self, x):
-        x = rearrange(x, '... h (l s) -> ... (h s) l', s=self.pool)
+        x = rearrange(x, "... h (l s) -> ... (h s) l", s=self.pool)
         x = self.linear(x)
         return x, None
 
@@ -40,10 +42,11 @@ class DownPool(nn.Module):
         x: (..., H)
         """
 
-        if x is None: return None, state
+        if x is None:
+            return None, state
         state.append(x)
         if len(state) == self.pool:
-            x = rearrange(torch.stack(state, dim=-1), '... h s -> ... (h s)')
+            x = rearrange(torch.stack(state, dim=-1), "... h s -> ... (h s)")
             x = x.unsqueeze(-1)
             x = self.linear(x)
             x = x.squeeze(-1)
@@ -70,8 +73,8 @@ class UpPool(nn.Module):
     def forward(self, x, skip=None):
         x = self.linear(x)
 
-        x = F.pad(x[..., :-1], (1, 0)) # Shift to ensure causality
-        x = rearrange(x, '... (h s) l -> ... h (l s)', s=self.pool)
+        x = F.pad(x[..., :-1], (1, 0))  # Shift to ensure causality
+        x = rearrange(x, "... (h s) l -> ... h (l s)", s=self.pool)
 
         if skip is not None:
             x = x + skip
@@ -88,19 +91,21 @@ class UpPool(nn.Module):
             x = x.unsqueeze(-1)
             x = self.linear(x)
             x = x.squeeze(-1)
-            x = rearrange(x, '... (h s) -> ... h s', s=self.pool)
+            x = rearrange(x, "... (h s) -> ... h s", s=self.pool)
             state = list(torch.unbind(x, dim=-1))
-        else: assert x is None
+        else:
+            assert x is None
         return y, state
 
     def default_state(self, *batch_shape, device=None):
-        state = torch.zeros(batch_shape + (self.d_output, self.pool), device=device) # (batch, h, s)
-        state = list(torch.unbind(state, dim=-1)) # List of (..., H)
+        state = torch.zeros(
+            batch_shape + (self.d_output, self.pool), device=device
+        )  # (batch, h, s)
+        state = list(torch.unbind(state, dim=-1))  # List of (..., H)
         return state
 
 
 class FFBlock(nn.Module):
-
     def __init__(self, d_model, expand=2, dropout=0.0):
         """
         Feed-forward block.
@@ -116,7 +121,7 @@ class FFBlock(nn.Module):
             d_model,
             d_model * expand,
             transposed=True,
-            activation='gelu',
+            activation="gelu",
             activate=True,
         )
         dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
@@ -146,7 +151,6 @@ class FFBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-
     def __init__(
         self,
         d_model,
@@ -285,7 +289,8 @@ class Sashimi(nn.Module):
                 # Add blocks in the down layers
                 for _ in range(n_layers):
                     d_layers.append(s4_block(H))
-                    if ff > 0: d_layers.append(ff_block(H))
+                    if ff > 0:
+                        d_layers.append(ff_block(H))
 
             # Add sequence downsampling and feature expanding
             d_layers.append(DownPool(H, expand, p))
@@ -295,7 +300,8 @@ class Sashimi(nn.Module):
         c_layers = []
         for _ in range(n_layers):
             c_layers.append(s4_block(H))
-            if ff > 0: c_layers.append(ff_block(H))
+            if ff > 0:
+                c_layers.append(ff_block(H))
 
         # Up blocks
         u_layers = []
@@ -306,7 +312,8 @@ class Sashimi(nn.Module):
 
             for _ in range(n_layers):
                 block.append(s4_block(H))
-                if ff > 0: block.append(ff_block(H))
+                if ff > 0:
+                    block.append(ff_block(H))
 
             u_layers.append(nn.ModuleList(block))
 
@@ -335,7 +342,9 @@ class Sashimi(nn.Module):
         for layer in self.c_layers:
             x, _ = layer(x)
         if self.residual:
-            x = x + outputs.pop() # add a skip connection to the last output of the down block
+            x = (
+                x + outputs.pop()
+            )  # add a skip connection to the last output of the down block
 
         # Up blocks
         for block in self.u_layers:
@@ -343,7 +352,7 @@ class Sashimi(nn.Module):
                 for layer in block:
                     x, _ = layer(x)
                     if self.residual:
-                        x = x + outputs.pop() # skip connection
+                        x = x + outputs.pop()  # skip connection
             else:
                 for layer in block:
                     x, _ = layer(x)
@@ -353,16 +362,22 @@ class Sashimi(nn.Module):
                             x = x + outputs.pop()
                         outputs.append(x)
                 if self.residual:
-                    x = x + outputs.pop() # add a skip connection from the input of the modeling part of this up block
+                    x = (
+                        x + outputs.pop()
+                    )  # add a skip connection from the input of the modeling part of this up block
 
         # feature projection
-        x = x.transpose(1, 2) # (batch, length, expand)
+        x = x.transpose(1, 2)  # (batch, length, expand)
         x = self.norm(x)
 
-        return x, None # required to return a state
+        return x, None  # required to return a state
 
     def default_state(self, *args, **kwargs):
-        layers = list(self.d_layers) + list(self.c_layers) + [layer for block in self.u_layers for layer in block]
+        layers = (
+            list(self.d_layers)
+            + list(self.c_layers)
+            + [layer for block in self.u_layers for layer in block]
+        )
         return [layer.default_state(*args, **kwargs) for layer in layers]
 
     def step(self, x, state, **kwargs):
@@ -374,13 +389,14 @@ class Sashimi(nn.Module):
         state = state[::-1]
 
         # Down blocks
-        outputs = [] # Store all layers for SaShiMi
+        outputs = []  # Store all layers for SaShiMi
         next_state = []
         for layer in self.d_layers:
             outputs.append(x)
             x, _next_state = layer.step(x, state=state.pop(), **kwargs)
             next_state.append(_next_state)
-            if x is None: break
+            if x is None:
+                break
 
         # Center block
         if x is None:
@@ -391,7 +407,7 @@ class Sashimi(nn.Module):
             if self.unet:
                 for i in range(skipped):
                     next_state.append(state.pop())
-                u_layers = list(self.u_layers)[skipped//3:]
+                u_layers = list(self.u_layers)[skipped // 3 :]
             else:
                 for i in range(skipped):
                     for _ in range(len(self.u_layers[i])):
@@ -429,7 +445,7 @@ class Sashimi(nn.Module):
         x = self.norm(x)
         return x, next_state
 
-    def setup_rnn(self, mode='dense'):
+    def setup_rnn(self, mode="dense"):
         """
         Convert the SaShiMi model to a RNN for autoregressive generation.
 
@@ -440,12 +456,13 @@ class Sashimi(nn.Module):
                 Note that `diagonal` could potentially be unstable if the diagonalization is numerically unstable
                 (although we haven't encountered this case in practice), while `dense` should always be stable.
         """
-        assert mode in ['dense', 'diagonal', 'linear']
+        assert mode in ["dense", "diagonal", "linear"]
         for module in self.modules():
-            if hasattr(module, '_setup_step'): module._setup_step(mode=mode)
+            if hasattr(module, "_setup_step"):
+                module._setup_step(mode=mode)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from tqdm.auto import tqdm
 
     model = Sashimi(n_layers=2).cuda()
@@ -460,11 +477,11 @@ if __name__ == '__main__':
         y, _ = model(x)
 
         # Setup the SaShiMi RNN
-        model.setup_rnn('diagonal')
+        model.setup_rnn("diagonal")
 
         # Forward in recurrent mode: used for autoregressive generation at inference time
         ys = []
-        state = model.default_state(*x.shape[:1], device='cuda')
+        state = model.default_state(*x.shape[:1], device="cuda")
         for i in tqdm(range(10240)):
             y_, state = model.step(x[:, i], state)
             ys.append(y_.detach().cpu())

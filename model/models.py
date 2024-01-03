@@ -37,56 +37,60 @@ class Packer(nn.Module):
 
 class Sashimi(nn.Module):
     # default configs from the paper SaShiMi experiment
-    sashimi_conf = {'_name_': 'sashimi',
-         'act_pool': None,
-         'd_model': 64,
-         'dropout': 0.0,
-         'dropres': 0.0,
-         'expand': 2,
-         'ff': 2,
-         'initializer': None,
-         'interp': 0,
-         'layer': {'_name_': 's4',
-                   'activation': 'gelu',
-                   'bidirectional': False,
-                   'bottleneck': None,
-                   'channels': 1,
-                   'd_state': 64,
-                   'deterministic': False,
-                   'drop_kernel': 0.0,
-                   'dt_max': 0.1,
-                   'dt_min': 0.001,
-                   'dt_transform': 'softplus',
-                   'final_act': 'glu',
-                   'gate': None,
-                   'gate_act': 'id',
-                   'init': 'legs',
-                   'initializer': None,
-                   'l_max': None,
-                   'layer': 'fftconv',
-                   'lr': {'A': 0.001, 'B': 0.001, 'dt': 0.001},
-                   'measure': None,
-                   'mode': 'nplr',
-                   'mult_act': None,
-                   'n_ssm': 1,
-                   'postact': None,
-                   'rank': 1,
-                   'tie_dropout': None,
-                   'verbose': True,
-                   'wd': 0.0,
-                   'weight_norm': False},
-         'n_layers': 8,
-         'norm': 'layer',
-         'pool': [4, 4],
-         'prenorm': True,
-         'residual': 'R',
-         'transposed': True}
-    del sashimi_conf['_name_']
+    sashimi_conf = {
+        "_name_": "sashimi",
+        "act_pool": None,
+        "d_model": 64,
+        "dropout": 0.0,
+        "dropres": 0.0,
+        "expand": 2,
+        "ff": 2,
+        "initializer": None,
+        "interp": 0,
+        "layer": {
+            "_name_": "s4",
+            "activation": "gelu",
+            "bidirectional": False,
+            "bottleneck": None,
+            "channels": 1,
+            "d_state": 64,
+            "deterministic": False,
+            "drop_kernel": 0.0,
+            "dt_max": 0.1,
+            "dt_min": 0.001,
+            "dt_transform": "softplus",
+            "final_act": "glu",
+            "gate": None,
+            "gate_act": "id",
+            "init": "legs",
+            "initializer": None,
+            "l_max": None,
+            "layer": "fftconv",
+            "lr": {"A": 0.001, "B": 0.001, "dt": 0.001},
+            "measure": None,
+            "mode": "nplr",
+            "mult_act": None,
+            "n_ssm": 1,
+            "postact": None,
+            "rank": 1,
+            "tie_dropout": None,
+            "verbose": True,
+            "wd": 0.0,
+            "weight_norm": False,
+        },
+        "n_layers": 8,
+        "norm": "layer",
+        "pool": [4, 4],
+        "prenorm": True,
+        "residual": "R",
+        "transposed": True,
+    }
+    del sashimi_conf["_name_"]
 
     def __init__(self, args):
         super().__init__()
         self.encoder = nn.Linear(1, args.sashimi_channels)
-        self.sashimi_conf['d_model'] = args.sashimi_channels
+        self.sashimi_conf["d_model"] = args.sashimi_channels
         self.model = SashmiBackbone(**self.sashimi_conf)
         self.added_decoder = False
         self.device = args.device
@@ -94,8 +98,12 @@ class Sashimi(nn.Module):
 
     def forward(self, x):
         if not self.added_decoder:
-            self.add_module('decoder', SequenceDecoder(self.channels, 1, x.shape[1],
-                    mode='last').to(self.device))
+            self.add_module(
+                "decoder",
+                SequenceDecoder(self.channels, 1, x.shape[1], mode="last").to(
+                    self.device
+                ),
+            )
             self.added_decoder = True
         x = x.unsqueeze(-1)
         x = self.encoder(x)
@@ -109,6 +117,7 @@ def get_ncp(args):
     ncp = NCP(args)
     return ncp
 
+
 def get_sashimi(args):
-    sashimi = Packer(Sashimi(args), pre_shape=[1,-1], post_shape=[1,1,1,-1])
+    sashimi = Packer(Sashimi(args), pre_shape=[1, -1], post_shape=[1, 1, 1, -1])
     return sashimi

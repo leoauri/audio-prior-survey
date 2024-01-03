@@ -39,14 +39,16 @@ def center_trim(tensor: torch.Tensor, reference: tp.Union[torch.Tensor, int]):
     if delta < 0:
         raise ValueError("tensor must be larger than reference. " f"Delta is {delta}.")
     if delta:
-        tensor = tensor[..., delta // 2:-(delta - delta // 2)]
+        tensor = tensor[..., delta // 2 : -(delta - delta // 2)]
     return tensor
 
 
 class BLSTM(nn.Module):
     def __init__(self, dim, layers=1):
         super().__init__()
-        self.lstm = nn.LSTM(bidirectional=True, num_layers=layers, hidden_size=dim, input_size=dim)
+        self.lstm = nn.LSTM(
+            bidirectional=True, num_layers=layers, hidden_size=dim, input_size=dim
+        )
         self.linear = nn.Linear(2 * dim, dim)
 
     def forward(self, x):
@@ -73,28 +75,28 @@ def rescale_module(module, reference):
 
 class Demucs(nn.Module):
     @capture_init
-    def __init__(self,
-                 sources,
-                 audio_channels=2,
-                 channels=64,
-                 depth=6,
-                 rewrite=True,
-                 glu=True,
-                 rescale=0.1,
-                 resample=True,
-                 kernel_size=8,
-                 stride=4,
-                 growth=2.,
-                 lstm_layers=2,
-                 context=3,
-                 normalize=False,
-                 samplerate=44100,
-                 segment_length=4 * 10 * 44100,
-                 skip=True,
-                 attention_layers=0,
-                 attention_heads=4
-
-                 ):
+    def __init__(
+        self,
+        sources,
+        audio_channels=2,
+        channels=64,
+        depth=6,
+        rewrite=True,
+        glu=True,
+        rescale=0.1,
+        resample=True,
+        kernel_size=8,
+        stride=4,
+        growth=2.0,
+        lstm_layers=2,
+        context=3,
+        normalize=False,
+        samplerate=44100,
+        segment_length=4 * 10 * 44100,
+        skip=True,
+        attention_layers=0,
+        attention_heads=4,
+    ):
         """
         Args:
             sources (int): number of sources
@@ -162,7 +164,10 @@ class Demucs(nn.Module):
             else:
                 out_channels = self.num_sources * audio_channels
             if rewrite:
-                decode += [nn.Conv1d(channels, ch_scale * channels, context), activation]
+                decode += [
+                    nn.Conv1d(channels, ch_scale * channels, context),
+                    activation,
+                ]
             decode += [nn.ConvTranspose1d(channels, out_channels, kernel_size, stride)]
             if index > 0:
                 decode.append(nn.ReLU())
@@ -173,8 +178,12 @@ class Demucs(nn.Module):
         channels = in_channels
 
         if attention_layers:
-            encoder_layer = nn.TransformerEncoderLayer(d_model=channels, nhead=attention_heads)
-            transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=attention_layers)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=channels, nhead=attention_heads
+            )
+            transformer_encoder = nn.TransformerEncoder(
+                encoder_layer, num_layers=attention_layers
+            )
             # self.attention = nn.MultiheadAttention(channels,attention_layers)
             self.attention = transformer_encoder
         else:
